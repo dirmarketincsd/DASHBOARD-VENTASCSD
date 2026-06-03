@@ -89,7 +89,7 @@ def cargar_ventas_diarias():
         # Normalizar nombres de columnas limpiando espacios múltiples
         df.columns = [str(c).strip().upper().replace('  ', ' ') for c in df.columns]
         
-        # Diccionario de normalización exacto (Estructura de la A a la I)
+        # Diccionario de normalización exacto (Estructura alineada con tu Sheets)
         rename_dict = {
             'FECHA': 'Fecha', 'SEMANA': 'Semana', 'RESPONSABLE': 'Responsable',
             'VALORACIONES': 'Valoraciones', 'LEADS WPP': 'Leads WPP', 'LEADS IG': 'Leads IG',
@@ -132,7 +132,6 @@ def cargar_ventas_diarias():
                 df[col] = df[col].astype(str).str.replace('N/A', '0', case=False).str.strip()
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
             else:
-                # Si por alguna razón la columna falta en la lectura, la creamos con 0 para que no rompa la app
                 df[col] = 0
                 
         return df
@@ -143,9 +142,9 @@ def cargar_ventas_diarias():
 # Carga inicial del DataFrame base
 df_base = cargar_ventas_diarias()
 
-# Asegurar que existan siempre las columnas calculadas base para evitar fallas
+# ── CORRECCIÓN DEL SYNTAX ERROR (Línea 148 corregida con 'not in') ───────────
 if not df_base.empty:
-    if 'Semana' not def_base.columns: df_base['Semana'] = "1"
+    if 'Semana' not in df_base.columns: df_base['Semana'] = "1"
     if 'Dia_Semana' not in df_base.columns: df_base['Dia_Semana'] = "Todos"
     if 'Grupo_Pais' not in df_base.columns: df_base['Grupo_Pais'] = "Por Clasificar"
 
@@ -244,7 +243,6 @@ with tab1:
         
         st.markdown("#### 📋 Registros Diario Coordinados")
         if cols_existentes:
-            # Ordenar por fecha de manera segura si la columna existe y es válida
             df_mostrar = df_filtrado[cols_existentes]
             if 'Fecha' in df_mostrar.columns and not df_mostrar['Fecha'].isnull().all():
                 df_mostrar = df_mostrar.sort_values(by='Fecha', ascending=False)
@@ -257,7 +255,7 @@ with tab1:
         else:
             st.info("No hay columnas suficientes para renderizar la tabla base.")
         
-        # Gráfica interactiva de Leads por canal y comercial (Protegida contra valores vacíos)
+        # Gráfica interactiva de Leads por canal y comercial
         if 'Responsable' in df_filtrado.columns and len(df_filtrado) > 0:
             st.markdown("---")
             st.markdown("#### 📈 Leads Entrantes por Canal y Comercial")
@@ -271,7 +269,7 @@ with tab1:
                                    color_discrete_sequence=['#00d4aa', '#7c6af7'], **PLOT_CFG)
                 st.plotly_chart(fig_leads, use_container_width=True)
             else:
-                st.caption("No hay datos de leads suficientes disponibles para generar el gráfico de barras.")
+                st.caption("No hay datos de leads suficientes disponibles para generar el gráfico.")
 
 # ==========================================
 # ══ TAB 2 — DESGLOSE REGIONAL USA VS ESPAÑA
