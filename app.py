@@ -70,7 +70,7 @@ EQUIPOS_BASE = {
 }
 
 # ── FUNCIÓN EXTRACCIÓN Y COORDINACIÓN DE GOOGLE SHEETS ────────────────────────
-@st.cache_data(ttl=180)
+@st.cache_data(ttl=60)
 def cargar_ventas_diarias():
     try:
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Ventas%20diarias"
@@ -79,14 +79,15 @@ def cargar_ventas_diarias():
         # 1. Buscador dinámico de la fila de encabezados reales
         header_idx = 0
         for i in range(min(15, len(raw_df))):
-            fila_valores = raw_df.iloc[i].map(str).str.upper().values
+            fila_valores = raw_df.iloc[i].map(str).str.upper().str.replace(r'\s+', ' ', regex=True).str.strip().values
             if any('RESPONSABLE' in f or 'VALORACIONES' in f for f in fila_valores):
                 header_idx = i
                 break
         
         # 2. Carga limpia saltando la fila combinada superior "VENTA DIARIA"
         df = pd.read_csv(url, skiprows=header_idx)
-        df.columns = [str(c).strip().upper() for c in df.columns]
+        # Normalizar nombres de columnas limpiando espacios múltiples
+        df.columns = [str(c).strip().upper().replace('  ', ' ') for c in df.columns]
         
         # Diccionario de normalización exacto (Estructura de la A a la I)
         rename_dict = {
@@ -130,6 +131,9 @@ def cargar_ventas_diarias():
             if col in df.columns:
                 df[col] = df[col].astype(str).str.replace('N/A', '0', case=False).str.strip()
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+            else:
+                # Si por alguna razón la columna falta en la lectura, la creamos con 0 para que no rompa la app
+                df[col] = 0
                 
         return df
     except Exception as e:
@@ -138,6 +142,12 @@ def cargar_ventas_diarias():
 
 # Carga inicial del DataFrame base
 df_base = cargar_ventas_diarias()
+
+# Asegurar que existan siempre las columnas calculadas base para evitar fallas
+if not df_base.empty:
+    if 'Semana' not def_base.columns: df_base['Semana'] = "1"
+    if 'Dia_Semana' not in df_base.columns: df_base['Dia_Semana'] = "Todos"
+    if 'Grupo_Pais' not in df_base.columns: df_base['Grupo_Pais'] = "Por Clasificar"
 
 # ── BARRA LATERAL: FILTROS DINÁMICOS CRUZADOS ─────────────────────────────────
 with st.sidebar:
@@ -179,14 +189,15 @@ with st.sidebar:
 # ── APLICAR FILTRADO MULTINIVEL AL DATAFRAME ──────────────────────────────────
 df_filtrado = df_base.copy()
 
-if semana_sel != "Todas":
-    df_filtrado = df_filtrado[df_filtrado['Semana'].astype(str) == semana_sel]
-if dia_sel != "Todos" and 'Dia_Semana' in df_filtrado.columns:
-    df_filtrado = df_filtrado[df_filtrado['Dia_Semana'] == dia_sel]
-if grupo_sel != "Todos" and 'Grupo_Pais' in df_filtrado.columns:
-    df_filtrado = df_filtrado[df_filtrado['Grupo_Pais'] == grupo_sel]
-if responsable_sel != "Todos" and 'Responsable' in df_filtrado.columns:
-    df_filtrado = df_filtrado[df_filtrado['Responsable'] == responsable_sel]
+if not df_filtrado.empty:
+    if semana_sel != "Todas":
+        df_filtrado = df_filtrado[df_filtrado['Semana'].astype(str) == semana_sel]
+    if dia_sel != "Todos" and 'Dia_Semana' in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado['Dia_Semana'] == dia_sel]
+    if grupo_sel != "Todos" and 'Grupo_Pais' in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado['Grupo_Pais'] == grupo_sel]
+    if responsable_sel != "Todos" and 'Responsable' in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado['Responsable'] == responsable_sel]
 
 # ── DISEÑO DE LA INTERFAZ PRINCIPAL ───────────────────────────────────────────
 col_logo_h, col_title_h = st.columns([1.2, 4])
@@ -214,13 +225,13 @@ with tab1:
     if df_filtrado.empty:
         st.warning("⚠️ No se encontraron registros con la combinación de filtros seleccionada en la barra lateral.")
     else:
-        # Fila superior de KPIs basados en el filtro actual con verificación de existencia
+        # Fila superior de KPIs basados en el filtro actual
         kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
-        kpi1.metric("💬 Leads WPP", f"{int(df_filtrado['Leads WPP'].sum()) if 'Leads WPP' in df_filtrado.columns else 0}")
-        kpi2.metric("📸 Leads IG", f"{int(df_filtrado['Leads IG'].sum()) if 'Leads IG' in df_filtrado.columns else 0}")
-        kpi3.metric("⭐ Valoraciones", f"{int(df_filtrado['Valoraciones'].sum()) if 'Valoraciones' in df_filtrado.columns else 0}")
-        kpi4.metric("📅 Agendados (Mañana)", f"{int(df_filtrado['Venta Dia Siguiente'].sum()) if 'Venta Dia Siguiente' in df_filtrado.columns else 0}")
-        kpi5.metric("🏆 Cierres", f"{int(df_filtrado['Cierres Agendados'].sum()) if 'Cierres Agendados' in df_filtrado.columns else 0}")
+        kpi1.metric("💬 Leads WPP", f"{int(df_filtrado['Leads WPP'].sum())}")
+        kpi2.metric("📸 Leads IG", f"{int(df_filtrado['Leads IG'].sum())}")
+        kpi3.metric("⭐ Valoraciones", f"{int(df_filtrado['Valoraciones'].sum())}")
+        kpi4.metric("📅 Agendados (Mañana)", f"{int(df_filtrado['Venta Dia Siguiente'].sum())}")
+        kpi5.metric("🏆 Cierres", f"{int(df_filtrado['Cierres Agendados'].sum())}")
         
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -233,24 +244,34 @@ with tab1:
         
         st.markdown("#### 📋 Registros Diario Coordinados")
         if cols_existentes:
+            # Ordenar por fecha de manera segura si la columna existe y es válida
+            df_mostrar = df_filtrado[cols_existentes]
+            if 'Fecha' in df_mostrar.columns and not df_mostrar['Fecha'].isnull().all():
+                df_mostrar = df_mostrar.sort_values(by='Fecha', ascending=False)
+                
             st.dataframe(
-                df_filtrado[cols_existentes].sort_values(by='Fecha', ascending=False) if 'Fecha' in df_filtrado.columns else df_filtrado[cols_existentes],
+                df_mostrar,
                 use_container_width=True,
                 hide_index=True
             )
         else:
-            st.info("No hay columnas coincidentes para mostrar en la tabla.")
+            st.info("No hay columnas suficientes para renderizar la tabla base.")
         
-        # Gráfica interactiva de Leads por canal y comercial
-        if 'Responsable' in df_filtrado.columns and ('Leads WPP' in df_filtrado.columns or 'Leads IG' in df_filtrado.columns):
+        # Gráfica interactiva de Leads por canal y comercial (Protegida contra valores vacíos)
+        if 'Responsable' in df_filtrado.columns and len(df_filtrado) > 0:
             st.markdown("---")
             st.markdown("#### 📈 Leads Entrantes por Canal y Comercial")
             columnas_grafica = [c for c in ['Leads WPP', 'Leads IG'] if c in df_filtrado.columns]
+            
             df_leads = df_filtrado.groupby('Responsable')[columnas_grafica].sum().reset_index()
-            fig_leads = px.bar(df_leads, x='Responsable', y=columnas_grafica,
-                               barmode='group', title="Canal de Entrada (WhatsApp vs Instagram)",
-                               color_discrete_sequence=['#00d4aa', '#7c6af7'], **PLOT_CFG)
-            st.plotly_chart(fig_leads, use_container_width=True)
+            
+            if not df_leads.empty and columnas_grafica:
+                fig_leads = px.bar(df_leads, x='Responsable', y=columnas_grafica,
+                                   barmode='group', title="Canal de Entrada (WhatsApp vs Instagram)",
+                                   color_discrete_sequence=['#00d4aa', '#7c6af7'], **PLOT_CFG)
+                st.plotly_chart(fig_leads, use_container_width=True)
+            else:
+                st.caption("No hay datos de leads suficientes disponibles para generar el gráfico de barras.")
 
 # ==========================================
 # ══ TAB 2 — DESGLOSE REGIONAL USA VS ESPAÑA
@@ -259,13 +280,11 @@ with tab2:
     st.markdown("### 🌍 Desglose Consolidado por Países")
     
     col_usa, col_esp = st.columns(2)
-    
-    # Columnas de agrupación métrica con filtro de existencia
     columnas_agrupar = [c for c in ['Leads WPP', 'Leads IG', 'Valoraciones', 'Venta Dia Siguiente', 'Cierres Agendados'] if c in df_base.columns]
     
     with col_usa:
         st.markdown("<h4 style='color:#7c6af7;'>🇺🇸 Grupo USA (Carolina y futuras integrantes)</h4>", unsafe_allow_html=True)
-        if 'Grupo_Pais' in df_base.columns and 'Responsable' in df_base.columns:
+        if 'Grupo_Pais' in df_base.columns and 'Responsable' in df_base.columns and not df_base.empty:
             df_usa_panel = df_base[df_base['Grupo_Pais'] == 'USA']
             if not df_usa_panel.empty:
                 st.dataframe(
@@ -273,13 +292,13 @@ with tab2:
                     use_container_width=True
                 )
             else:
-                st.info("No hay datos históricos acumulados para USA.")
+                st.info("No hay datos históricos acumulados para el equipo de USA.")
         else:
-            st.warning("Estructura de columnas incompleta para generar desglose.")
+            st.caption("Esperando datos válidos desde la hoja de Sheets.")
             
     with col_esp:
         st.markdown("<h4 style='color:#00d4aa;'>🇪🇸 Grupo España (Daniela, Evelyn y futuras integrantes)</h4>", unsafe_allow_html=True)
-        if 'Grupo_Pais' in df_base.columns and 'Responsable' in df_base.columns:
+        if 'Grupo_Pais' in df_base.columns and 'Responsable' in df_base.columns and not df_base.empty:
             df_esp_panel = df_base[df_base['Grupo_Pais'] == 'España']
             if not df_esp_panel.empty:
                 st.dataframe(
@@ -287,6 +306,6 @@ with tab2:
                     use_container_width=True
                 )
             else:
-                st.info("No hay datos históricos acumulados para España.")
+                st.info("No hay datos históricos acumulados para el equipo de España.")
         else:
-            st.warning("Estructura de columnas incompleta para generar desglose.")
+            st.caption("Esperando datos válidos desde la hoja de Sheets.")
