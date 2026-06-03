@@ -388,93 +388,127 @@ with tab2:
             inicio_sem = hoy_ts - timedelta(days=hoy_ts.weekday())
             inicio_mes = hoy_ts.replace(day=1)
 
-            df_hoy = df_m[df_m['Fecha'].dt.date == hoy_ts.date()] if 'Fecha' in df_m.columns else pd.DataFrame()
-            df_sem = df_m[df_m['Fecha'] >= inicio_sem]            if 'Fecha' in df_m.columns else pd.DataFrame()
-            df_mes = df_m[df_m['Fecha'] >= inicio_mes]            if 'Fecha' in df_m.columns else pd.DataFrame()
+            def filtrar_periodo(df_src, grupo=None):
+                d = df_src.copy()
+                if grupo and 'Grupo_Pais' in d.columns:
+                    d = d[d['Grupo_Pais'] == grupo]
+                return d
 
-            asesores = sorted(df_m['Responsable'].dropna().unique().tolist()) if 'Responsable' in df_m.columns else []
-            n = max(len(asesores), 1)
+            def get_cierres(df_src, desde=None, hasta=None):
+                d = df_src.copy()
+                if desde is not None:
+                    d = d[d['Fecha'].dt.date >= desde] if 'Fecha' in d.columns else d
+                if hasta is not None:
+                    d = d[d['Fecha'].dt.date <= hasta] if 'Fecha' in d.columns else d
+                return int(d['Cierres'].sum()) if 'Cierres' in d.columns and not d.empty else 0
 
-            c_hoy = int(df_hoy['Cierres'].sum()) if not df_hoy.empty and 'Cierres' in df_hoy.columns else 0
-            c_sem = int(df_sem['Cierres'].sum()) if not df_sem.empty and 'Cierres' in df_sem.columns else 0
-            c_mes = int(df_mes['Cierres'].sum()) if not df_mes.empty and 'Cierres' in df_mes.columns else 0
+            # Asesores por grupo
+            asesores_esp = [r for r in df_m['Responsable'].dropna().unique() if EQUIPOS_BASE.get(r,'') == 'España'] if 'Responsable' in df_m.columns else []
+            asesores_usa = [r for r in df_m['Responsable'].dropna().unique() if EQUIPOS_BASE.get(r,'') == 'USA']    if 'Responsable' in df_m.columns else []
+            n_esp = max(len(asesores_esp), 1)
+            n_usa = max(len(asesores_usa), 1)
 
-            m_dia = META_DIARIA * n
-            m_sem = META_SEMANAL * n
-            m_mes = META_MENSUAL * n
+            df_esp_m = filtrar_periodo(df_m, 'España')
+            df_usa_m = filtrar_periodo(df_m, 'USA')
 
-            st.markdown(f"**Equipo:** {n} asesor(es) · **Meta diaria:** {META_DIARIA} cierres/asesor · **Semanal:** {META_SEMANAL} · **Mensual:** {META_MENSUAL}")
-            st.markdown("---")
+            hoy_date = hoy_ts.date()
 
-            def tarjeta_meta(titulo, actual, meta, emoji):
+            def tarjeta_meta(titulo, actual, meta, emoji, color_borde='#c9a84c'):
                 p = min(round(actual/meta*100, 1) if meta > 0 else 0, 100)
                 color = "#00d4aa" if p >= 100 else "#f7a76c" if p >= 50 else "#ff6b6b"
                 faltan = max(meta - actual, 0)
                 st.markdown(f"""
-                <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #c9a84c;
-                            border-radius:14px;padding:18px 20px;margin-bottom:8px">
-                    <div style="color:#8b9bb4;font-size:0.75rem;text-transform:uppercase;letter-spacing:1px">{emoji} {titulo}</div>
-                    <div style="color:white;font-size:2.2rem;font-weight:800">{actual} <span style="color:#8b9bb4;font-size:1rem">/ {meta}</span></div>
-                    <div style="color:{color};font-size:0.95rem;font-weight:600">{p}% completado</div>
-                    <div style="background:#1e2340;border-radius:10px;height:12px;width:100%;margin:8px 0">
-                        <div style="height:12px;border-radius:10px;background:{color};width:{p}%"></div>
+                <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color_borde};
+                            border-radius:14px;padding:14px 18px;margin-bottom:8px">
+                    <div style="color:#8b9bb4;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px">{emoji} {titulo}</div>
+                    <div style="color:white;font-size:1.9rem;font-weight:800">{actual} <span style="color:#8b9bb4;font-size:0.95rem">/ {meta}</span></div>
+                    <div style="color:{color};font-size:0.9rem;font-weight:600">{p}% completado</div>
+                    <div style="background:#1e2340;border-radius:10px;height:10px;width:100%;margin:6px 0">
+                        <div style="height:10px;border-radius:10px;background:{color};width:{p}%"></div>
                     </div>
-                    <div style="color:#ff6b6b;font-size:0.85rem">Faltan: <b>{faltan}</b> cierres</div>
+                    <div style="color:#ff6b6b;font-size:0.8rem">Faltan: <b>{faltan}</b></div>
                 </div>""", unsafe_allow_html=True)
 
-            mc1, mc2, mc3 = st.columns(3)
-            with mc1: tarjeta_meta("Meta Diaria",  c_hoy, m_dia, "📅")
-            with mc2: tarjeta_meta("Meta Semanal", c_sem, m_sem, "📆")
-            with mc3: tarjeta_meta("Meta Mensual", c_mes, m_mes, "🗓️")
+            def barras_asesor(df_grupo, titulo, color_borde):
+                st.markdown(f"#### 🏁 {titulo}")
+                df_hoy_g = df_grupo[df_grupo['Fecha'].dt.date == hoy_date] if 'Fecha' in df_grupo.columns else pd.DataFrame()
+                if not df_hoy_g.empty and 'Responsable' in df_hoy_g.columns:
+                    df_r = df_hoy_g.groupby('Responsable')['Cierres'].sum().reset_index().sort_values('Cierres', ascending=False)
+                    for _, row in df_r.iterrows():
+                        p = min(round(row['Cierres']/META_DIARIA*100, 1), 100)
+                        c = int(row['Cierres'])
+                        nombre = row['Responsable']
+                        faltan = max(META_DIARIA - c, 0)
+                        color = "#00d4aa" if p >= 100 else "#f7a76c" if p >= 60 else "#ff6b6b"
+                        estado = "✅ ¡Meta!" if p >= 100 else f"🔥 Faltan {faltan}" if p >= 60 else f"⚡ Faltan {faltan}"
+                        st.markdown(f"""
+                        <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color_borde};
+                                    border-radius:12px;padding:12px 16px;margin-bottom:8px">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                                <div style="color:white;font-weight:700">👤 {nombre}</div>
+                                <div style="color:{color};font-weight:600;font-size:0.85rem">{estado}</div>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:10px">
+                                <div style="flex:1;background:#1e2340;border-radius:8px;height:12px">
+                                    <div style="height:12px;border-radius:8px;background:{color};width:{p}%"></div>
+                                </div>
+                                <div style="color:#c9a84c;font-size:0.82rem;font-weight:700;min-width:80px;text-align:right">
+                                    {c} / {META_DIARIA} · {p}%
+                                </div>
+                            </div>
+                        </div>""", unsafe_allow_html=True)
+                else:
+                    st.info("Sin depósitos hoy.")
+
+            # ── ESPAÑA ──────────────────────────────────────────────────────
+            st.markdown("""<div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #00d4aa;
+                border-radius:14px;padding:12px 20px;margin-bottom:12px">
+                <span style="color:#00d4aa;font-size:1.1rem;font-weight:800">🇪🇸 GRUPO ESPAÑA</span>
+                <span style="color:#8b9bb4;font-size:0.8rem;margin-left:12px">{} asesor(es): {}</span>
+            </div>""".format(n_esp, ', '.join(asesores_esp) if asesores_esp else 'Sin datos'), unsafe_allow_html=True)
+
+            ec1, ec2, ec3 = st.columns(3)
+            with ec1: tarjeta_meta("Depósitos Hoy",    get_cierres(df_esp_m, hoy_date, hoy_date),              META_DIARIA*n_esp,   "📅", "#00d4aa")
+            with ec2: tarjeta_meta("Depósitos Semana", get_cierres(df_esp_m, inicio_sem.date(), hoy_date),    META_SEMANAL*n_esp,  "📆", "#00d4aa")
+            with ec3: tarjeta_meta("Depósitos Mes",    get_cierres(df_esp_m, inicio_mes.date(), hoy_date),    META_MENSUAL*n_esp,  "🗓️", "#00d4aa")
+
+            barras_asesor(df_esp_m, "Progreso de HOY — España", "#00d4aa")
 
             st.markdown("---")
 
-            # ── Barras de progreso por asesor HOY ──
-            st.markdown("#### 🏁 ¿Quién está más cerca de la meta de HOY? (Depósitos)")
-            if not df_hoy.empty and 'Responsable' in df_hoy.columns:
-                df_hoy_r = df_hoy.groupby('Responsable')['Cierres'].sum().reset_index()
-                df_hoy_r = df_hoy_r.sort_values('Cierres', ascending=False)
-                for _, row in df_hoy_r.iterrows():
-                    p = min(round(row['Cierres']/META_DIARIA*100, 1), 100)
-                    c = int(row['Cierres'])
-                    nombre = row['Responsable']
-                    faltan = max(META_DIARIA - c, 0)
-                    color = "#00d4aa" if p >= 100 else "#f7a76c" if p >= 60 else "#ff6b6b"
-                    estado = "✅ ¡Meta cumplida!" if p >= 100 else f"🔥 Faltan {faltan}" if p >= 60 else f"⚡ Faltan {faltan}"
-                    st.markdown(f"""
-                    <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #2a2000;
-                                border-radius:12px;padding:14px 18px;margin-bottom:10px">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                            <div style="color:white;font-weight:700;font-size:1rem">👤 {nombre}</div>
-                            <div style="color:{color};font-weight:600;font-size:0.9rem">{estado}</div>
-                        </div>
-                        <div style="display:flex;align-items:center;gap:12px">
-                            <div style="flex:1;background:#1e2340;border-radius:10px;height:14px">
-                                <div style="height:14px;border-radius:10px;background:{color};width:{p}%"></div>
-                            </div>
-                            <div style="color:#c9a84c;font-size:0.85rem;font-weight:700;min-width:90px;text-align:right">
-                                {c} / {META_DIARIA} · {p}%
-                            </div>
-                        </div>
-                    </div>""", unsafe_allow_html=True)
-            else:
-                st.info("📝 Sin cierres registrados hoy.")
+            # ── USA ─────────────────────────────────────────────────────────
+            st.markdown("""<div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #7c6af7;
+                border-radius:14px;padding:12px 20px;margin-bottom:12px">
+                <span style="color:#7c6af7;font-size:1.1rem;font-weight:800">🇺🇸 GRUPO USA</span>
+                <span style="color:#8b9bb4;font-size:0.8rem;margin-left:12px">{} asesor(es): {}</span>
+            </div>""".format(n_usa, ', '.join(asesores_usa) if asesores_usa else 'Sin datos'), unsafe_allow_html=True)
+
+            uc1, uc2, uc3 = st.columns(3)
+            with uc1: tarjeta_meta("Depósitos Hoy",    get_cierres(df_usa_m, hoy_date, hoy_date),             META_DIARIA*n_usa,   "📅", "#7c6af7")
+            with uc2: tarjeta_meta("Depósitos Semana", get_cierres(df_usa_m, inicio_sem.date(), hoy_date),   META_SEMANAL*n_usa,  "📆", "#7c6af7")
+            with uc3: tarjeta_meta("Depósitos Mes",    get_cierres(df_usa_m, inicio_mes.date(), hoy_date),   META_MENSUAL*n_usa,  "🗓️", "#7c6af7")
+
+            barras_asesor(df_usa_m, "Progreso de HOY — USA", "#7c6af7")
 
             st.markdown("---")
 
-            # ── Ranking mensual ──
-            st.markdown("#### 🏆 Ranking Mensual por Asesor (Depósitos)")
-            if not df_mes.empty and 'Responsable' in df_mes.columns:
-                df_rank = df_mes.groupby('Responsable')['Cierres'].sum().reset_index()
+            # ── Ranking mensual global ───────────────────────────────────────
+            st.markdown("#### 🏆 Ranking Mensual Global por Asesor")
+            df_mes_all = df_m[df_m['Fecha'] >= inicio_mes] if 'Fecha' in df_m.columns else pd.DataFrame()
+            if not df_mes_all.empty and 'Responsable' in df_mes_all.columns:
+                df_rank = df_mes_all.groupby('Responsable')['Cierres'].sum().reset_index()
+                df_rank['Grupo'] = df_rank['Responsable'].map(lambda x: EQUIPOS_BASE.get(x, 'Por Clasificar'))
                 df_rank = df_rank.rename(columns={'Cierres':'Depósitos'})
                 df_rank['Meta'] = META_MENSUAL
                 df_rank['% Cumplimiento'] = (df_rank['Depósitos']/META_MENSUAL*100).round(1)
                 df_rank['Faltan'] = (META_MENSUAL - df_rank['Depósitos']).clip(lower=0)
                 df_rank = df_rank.sort_values('Depósitos', ascending=False)
-                fig_rank = go.Figure()
-                fig_rank.add_trace(go.Bar(name='Depósitos', x=df_rank['Responsable'], y=df_rank['Depósitos'], marker_color='#00d4aa'))
-                fig_rank.add_trace(go.Bar(name='Meta', x=df_rank['Responsable'], y=df_rank['Meta'], marker_color='rgba(201,168,76,0.3)'))
-                fig_rank.update_layout(barmode='overlay', **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+                color_map = {'España':'#00d4aa','USA':'#7c6af7','Por Clasificar':'#f0d080'}
+                fig_rank = px.bar(df_rank, x='Responsable', y='Depósitos', color='Grupo',
+                                  color_discrete_map=color_map)
+                fig_rank.add_hline(y=META_MENSUAL, line_dash='dash', line_color='#c9a84c',
+                                   annotation_text=f'Meta {META_MENSUAL}')
+                fig_rank.update_layout(**PLOT_CFG, margin=dict(t=30,b=0,l=0,r=0))
                 st.plotly_chart(fig_rank, use_container_width=True)
                 st.dataframe(df_rank, use_container_width=True, hide_index=True)
             else:
