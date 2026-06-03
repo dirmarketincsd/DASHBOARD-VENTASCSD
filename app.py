@@ -25,11 +25,28 @@ def get_logo_base64():
 
 logo_b64 = get_logo_base64()
 
-# ── ESTILOS CSS PERSONALIZADOS (ESTILO PREMIUM NEGRO/DORADO) ──────────────────
+# ── ESTILOS CSS PERSONALIZADOS (CON CORRECCIÓN DE CONTRASTE PARA TEXTOS) ──────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght=300;400;600;700;800&display=swap');
 html, body, [class*="css"] { font-family: 'Poppins', sans-serif; }
+
+/* 🚨 CORRECCIÓN: Forzar letras blancas y legibles en toda la barra lateral */
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+section[data-testid="stSidebar"] h1, 
+section[data-testid="stSidebar"] h2, 
+section[data-testid="stSidebar"] h3,
+section[data-testid="stSidebar"] label {
+    color: #ffffff !important;
+    font-weight: 500 !important;
+}
+
+/* Títulos específicos dentro de la barra lateral en dorado */
+section[data-testid="stSidebar"] h3 {
+    color: #c9a84c !important;
+    font-size: 1.15rem !important;
+    margin-bottom: 5px !important;
+}
 
 /* Tarjetas de Métricas (KPIs) */
 div[data-testid="stMetric"] {
@@ -49,7 +66,7 @@ div[data-testid="stMetricValue"] { color: #ffffff !important; font-size: 1.9rem 
 .stTabs [data-baseweb="tab"] { background: #111100; border-radius: 8px; color: #c9a84c; padding: 8px 20px; font-weight: 600; border: 1px solid #2a2000; }
 .stTabs [aria-selected="true"] { background: linear-gradient(135deg, #c9a84c, #f0d080) !important; color: #000000 !important; }
 
-/* Barra Lateral (Sidebar) */
+/* Barra Lateral (Fondo y Bordes) */
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #0a0a00, #111100) !important;
     border-right: 1px solid #c9a84c !important;
@@ -142,7 +159,6 @@ def cargar_ventas_diarias():
 # Carga inicial del DataFrame base
 df_base = cargar_ventas_diarias()
 
-# ── CORRECCIÓN DEL SYNTAX ERROR (Línea 148 corregida con 'not in') ───────────
 if not df_base.empty:
     if 'Semana' not in df_base.columns: df_base['Semana'] = "1"
     if 'Dia_Semana' not in df_base.columns: df_base['Dia_Semana'] = "Todos"
@@ -152,7 +168,7 @@ if not df_base.empty:
 with st.sidebar:
     if logo_b64:
         st.markdown(f'<div style="text-align:center;padding:16px 0 8px 0"><img src="data:image/png;base64,{logo_b64}" style="width:180px;border-radius:8px"></div>', unsafe_allow_html=True)
-    st.markdown('<div style="color:#c9a84c;font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;text-align:center;margin-bottom:10px">Panel de Control</div>', unsafe_allow_html=True)
+    st.markdown('<div style="color:#c9a84c;font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;text-align:center;margin-bottom:10px;font-weight:700">Panel de Control</div>', unsafe_allow_html=True)
     st.markdown("---")
     
     st.markdown("### 🔍 Filtrar Tabla Comercial")
@@ -255,21 +271,27 @@ with tab1:
         else:
             st.info("No hay columnas suficientes para renderizar la tabla base.")
         
-        # Gráfica interactiva de Leads por canal y comercial
-        if 'Responsable' in df_filtrado.columns and len(df_filtrado) > 0:
+        # Gráfica de leads protegida
+        if 'Responsable' in df_filtrado.columns and not df_filtrado.empty:
             st.markdown("---")
             st.markdown("#### 📈 Leads Entrantes por Canal y Comercial")
-            columnas_grafica = [c for c in ['Leads WPP', 'Leads IG'] if c in df_filtrado.columns]
             
-            df_leads = df_filtrado.groupby('Responsable')[columnas_grafica].sum().reset_index()
+            df_leads = df_filtrado.groupby('Responsable', as_index=False)[['Leads WPP', 'Leads IG']].sum()
             
-            if not df_leads.empty and columnas_grafica:
-                fig_leads = px.bar(df_leads, x='Responsable', y=columnas_grafica,
-                                   barmode='group', title="Canal de Entrada (WhatsApp vs Instagram)",
-                                   color_discrete_sequence=['#00d4aa', '#7c6af7'], **PLOT_CFG)
+            if not df_leads.empty and (df_leads['Leads WPP'].sum() > 0 or df_leads['Leads IG'].sum() > 0):
+                fig_leads = px.bar(
+                    df_leads, 
+                    x='Responsable', 
+                    y=['Leads WPP', 'Leads IG'],
+                    barmode='group', 
+                    title="Canal de Entrada (WhatsApp vs Instagram)",
+                    color_discrete_sequence=['#00d4aa', '#7c6af7'], 
+                    template='plotly_dark'
+                )
+                fig_leads.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig_leads, use_container_width=True)
             else:
-                st.caption("No hay datos de leads suficientes disponibles para generar el gráfico.")
+                st.info("ℹ️ No hay registros de leads comerciales mayores a 0 en el periodo seleccionado.")
 
 # ==========================================
 # ══ TAB 2 — DESGLOSE REGIONAL USA VS ESPAÑA
