@@ -76,7 +76,7 @@ def cargar_ventas_diarias():
             'RESPONSABLE':'Responsable','VALORACIONES':'Valoraciones',
             'LEADS WPP':'Leads WPP','LEADS IG':'Leads IG','SEDE':'Sede',
             'CIERRES AGENDADOS':'Cierres',
-            'VENTA DIA SIGUIENTE(AGENDADOS)':'Venta Dia Siguiente'
+            'Presupuestado(AGENDADOS)':'Venta Dia Siguiente'
         }
         df = df.rename(columns=rename)
         if 'Responsable' in df.columns:
