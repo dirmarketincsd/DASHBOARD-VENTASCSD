@@ -112,9 +112,12 @@ def cargar_ventas_diarias():
         df['Semana'] = df['Semana'].astype(str).str.strip()
         for col in ['Valoraciones','Leads WPP','Leads IG','Cierres','Venta Dia Siguiente']:
             if col in df.columns:
-                df[col] = df[col].astype(str).str.replace('N/A','0',case=False).str.replace('','0').str.strip()
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-                df[col] = df[col].clip(lower=0).astype(int)
+                # Limpiar: reemplazar N/A, nan, vacíos con 0
+                serie = df[col].astype(str).str.strip()
+                serie = serie.replace({'N/A':'0','n/a':'0','NA':'0','nan':'0','None':'0','':'0'}, regex=False)
+                serie = serie.str.replace('[^0-9.-]', '', regex=True)  # solo números
+                serie = serie.replace('', '0')
+                df[col] = pd.to_numeric(serie, errors='coerce').fillna(0).clip(lower=0).astype(int)
             else:
                 df[col] = 0
         return df
