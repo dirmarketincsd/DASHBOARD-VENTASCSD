@@ -24,15 +24,7 @@ def get_logo_base64():
 
 logo_b64 = get_logo_base64()
 
-def get_marca_base64():
-    try:
-        marca_path = Path(__file__).parent / "Marca_de_agua_2026.png"
-        with open(marca_path, "rb") as f:
-            return base64.b64encode(f.read()).decode()
-    except:
-        return None
-
-marca_b64 = get_marca_base64()
+marca_b64 = None
 
 st.markdown("""
 <style>
@@ -128,8 +120,6 @@ def cargar_ventas_diarias():
 with st.sidebar:
     if logo_b64:
         st.markdown(f'<div style="text-align:center;padding:16px 0 8px 0"><img src="data:image/png;base64,{logo_b64}" style="width:180px;border-radius:8px"></div>', unsafe_allow_html=True)
-    if marca_b64:
-        st.markdown(f'<div style="text-align:center;padding:0 0 8px 0"><img src="data:image/png;base64,{marca_b64}" style="width:140px;opacity:0.85;border-radius:6px"></div>', unsafe_allow_html=True)
     st.markdown('<div style="color:#c9a84c;font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;text-align:center;margin-bottom:10px">Panel de Control</div>', unsafe_allow_html=True)
     st.markdown("---")
     periodo = st.selectbox("📅 Período", ["Hoy","Ayer","Esta semana","Este mes","Personalizado"])
