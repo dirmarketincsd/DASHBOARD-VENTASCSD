@@ -145,7 +145,6 @@ def cargar_españa():
                     data_esp.append({'Sede': sede.capitalize(), 'Agendados': ag, 'Realizados': re})
                     break
         if not data_esp:
-            # Fallback con datos conocidos de mayo 2026
             data_esp = [
                 {'Sede':'Alicante','Agendados':10,'Realizados':7},
                 {'Sede':'Barcelona','Agendados':13.5,'Realizados':12.5},
@@ -155,10 +154,12 @@ def cargar_españa():
                 {'Sede':'Bilbao','Agendados':0,'Realizados':2.5},
             ]
         df = pd.DataFrame(data_esp)
-        df['% Conversión'] = (df['Realizados']/df['Agendados']*100).round(1).fillna(0)
+        df['Agendados'] = pd.to_numeric(df['Agendados'], errors='coerce').fillna(0)
+        df['Realizados'] = pd.to_numeric(df['Realizados'], errors='coerce').fillna(0)
+        df['% Conversión'] = df.apply(lambda r: round(r['Realizados']/r['Agendados']*100,1) if r['Agendados']>0 else 0, axis=1)
         return df
     except:
-        return pd.DataFrame([
+        df = pd.DataFrame([
             {'Sede':'Alicante','Agendados':10,'Realizados':7},
             {'Sede':'Barcelona','Agendados':13.5,'Realizados':12.5},
             {'Sede':'Valencia','Agendados':6,'Realizados':2},
@@ -166,6 +167,8 @@ def cargar_españa():
             {'Sede':'Malaga','Agendados':20.5,'Realizados':10.5},
             {'Sede':'Bilbao','Agendados':0,'Realizados':2.5},
         ])
+        df['% Conversión'] = df.apply(lambda r: round(r['Realizados']/r['Agendados']*100,1) if r['Agendados']>0 else 0, axis=1)
+        return df
 
 # ── CARGA USA MAYO ─────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
@@ -200,16 +203,20 @@ def cargar_usa():
                 {'Sede':'Los Angeles','Agendados':11.5,'Realizados':13.5},
             ]
         df = pd.DataFrame(data_usa)
-        df['% Conversión'] = (df['Realizados']/df['Agendados']*100).round(1).fillna(0)
+        df['Agendados'] = pd.to_numeric(df['Agendados'], errors='coerce').fillna(0)
+        df['Realizados'] = pd.to_numeric(df['Realizados'], errors='coerce').fillna(0)
+        df['% Conversión'] = df.apply(lambda r: round(r['Realizados']/r['Agendados']*100,1) if r['Agendados']>0 else 0, axis=1)
         return df
     except:
-        return pd.DataFrame([
+        df = pd.DataFrame([
             {'Sede':'Dallas','Agendados':8.5,'Realizados':6.5},
             {'Sede':'Houston','Agendados':4,'Realizados':7.5},
             {'Sede':'New Jersey','Agendados':6.5,'Realizados':4.5},
             {'Sede':'Orlando','Agendados':3.5,'Realizados':4.5},
             {'Sede':'Los Angeles','Agendados':11.5,'Realizados':13.5},
         ])
+        df['% Conversión'] = df.apply(lambda r: round(r['Realizados']/r['Agendados']*100,1) if r['Agendados']>0 else 0, axis=1)
+        return df
 
 # ── CARGA GLOBAL ───────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
