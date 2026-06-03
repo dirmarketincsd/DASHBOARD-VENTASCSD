@@ -24,6 +24,16 @@ def get_logo_base64():
 
 logo_b64 = get_logo_base64()
 
+def get_marca_base64():
+    try:
+        marca_path = Path(__file__).parent / "Marca_de_agua_2026.png"
+        with open(marca_path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except:
+        return None
+
+marca_b64 = get_marca_base64()
+
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap');
@@ -117,7 +127,9 @@ def cargar_ventas_diarias():
 # ── SIDEBAR ───────────────────────────────────────────────────
 with st.sidebar:
     if logo_b64:
-        st.markdown(f'<div style="text-align:center;padding:10px 0"><img src="data:image/png;base64,{logo_b64}" style="width:160px"></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="text-align:center;padding:16px 0 8px 0"><img src="data:image/png;base64,{logo_b64}" style="width:180px;border-radius:8px"></div>', unsafe_allow_html=True)
+    if marca_b64:
+        st.markdown(f'<div style="text-align:center;padding:0 0 8px 0"><img src="data:image/png;base64,{marca_b64}" style="width:140px;opacity:0.85;border-radius:6px"></div>', unsafe_allow_html=True)
     st.markdown('<div style="color:#c9a84c;font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;text-align:center;margin-bottom:10px">Panel de Control</div>', unsafe_allow_html=True)
     st.markdown("---")
     periodo = st.selectbox("📅 Período", ["Hoy","Ayer","Esta semana","Este mes","Personalizado"])
@@ -140,19 +152,22 @@ with st.sidebar:
     st.caption("Se actualiza cada 3 min")
 
 # ── HEADER ────────────────────────────────────────────────────
-col_logo, col_title = st.columns([1, 3])
+col_logo, col_title, col_marca = st.columns([1.2, 2.5, 1.2])
 with col_logo:
     if logo_b64:
-        st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:220px;margin-top:10px">', unsafe_allow_html=True)
+        st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:200px;margin-top:10px;border-radius:8px">', unsafe_allow_html=True)
     else:
         st.markdown("### 🦷 CSD")
 with col_title:
     st.markdown("""
-    <div style="padding-top:15px">
+    <div style="padding-top:15px;text-align:center">
         <div style="color:#c9a84c;font-size:0.8rem;text-transform:uppercase;letter-spacing:3px">Dashboard Comercial</div>
         <div style="color:#ffffff;font-size:2rem;font-weight:800;line-height:1.2">Reporte de Ventas</div>
         <div style="color:#c9a84c;font-size:0.85rem">España 🇪🇸 · USA 🇺🇸 · Seguimiento en tiempo real</div>
     </div>""", unsafe_allow_html=True)
+with col_marca:
+    if marca_b64:
+        st.markdown(f'<div style="text-align:right;padding-top:10px"><img src="data:image/png;base64,{marca_b64}" style="width:180px;border-radius:8px;opacity:0.9"></div>', unsafe_allow_html=True)
 st.markdown(f'<div style="color:#8b8b6b;font-size:0.8rem;margin-top:8px">📅 Hoy: {date.today().strftime("%d de %B de %Y")} · Período seleccionado: {periodo}</div>', unsafe_allow_html=True)
 st.markdown("---")
 
@@ -193,15 +208,23 @@ with tab1:
         DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
         METRICAS = ['Cierres','Valoraciones','Leads WPP','Leads IG','Venta Diaria']
         COLORES  = {'Cierres':'#00d4aa','Valoraciones':'#f0d080','Leads WPP':'#7c6af7','Leads IG':'#f7a76c','Venta Diaria':'#4fc3f7'}
+        ICONOS   = {'Cierres':'🏆','Valoraciones':'⭐','Leads WPP':'💬','Leads IG':'📸','Venta Diaria':'💰'}
 
         def build_semana(df_src, sem_ini, sem_fin):
             dias = pd.date_range(sem_ini, sem_fin, freq='D')
             rows = []
             for d in dias:
-                fila = {'Fecha': d, 'Dia': DIAS[d.weekday()]}
-                sub = df_src[df_src['Fecha'] == d] if 'Fecha' in df_src.columns and not df_src.empty else pd.DataFrame()
-                for m in METRICAS:
-                    fila[m] = sub[m].sum() if m in sub.columns and not sub.empty else 0
+                fila = {'Fecha': d, 'Dia': DIAS[d.weekday() % 7]}
+                try:
+                    if df_src is not None and not df_src.empty and 'Fecha' in df_src.columns:
+                        sub = df_src[df_src['Fecha'] == d]
+                    else:
+                        sub = pd.DataFrame()
+                    for m in METRICAS:
+                        fila[m] = float(sub[m].sum()) if (not sub.empty and m in sub.columns) else 0.0
+                except Exception:
+                    for m in METRICAS:
+                        fila[m] = 0.0
                 rows.append(fila)
             return pd.DataFrame(rows)
 
@@ -233,7 +256,7 @@ with tab1:
                 delta = val - ant
                 fmt = f"${val:,.0f}" if m == 'Venta Diaria' else f"{int(val)}"
                 delta_fmt = f"{'+'if delta>=0 else ''}{int(delta)}" if m != 'Venta Diaria' else f"{'+'if delta>=0 else ''}${delta:,.0f}"
-                cols_k[i].metric(f"{COLORES[m][0]} {m}", fmt, delta_fmt)
+                cols_k[i].metric(f"{ICONOS[m]} {m}", fmt, delta_fmt)
 
             st.markdown("---")
 
