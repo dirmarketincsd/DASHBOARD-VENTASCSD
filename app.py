@@ -135,12 +135,17 @@ def cargar_ventas_diarias():
 
             df['Grupo_Pais'] = df.apply(asignar_grupo, axis=1)
             
-        # 5. Formateo estructurado de Fechas y cálculo del Día de la Semana con mapeo robusto
+        # 5. PARSEO SEGURO DE FECHAS Y TRADUCCIÓN DE DÍAS (Aquí estaba el fallo)
         if 'Fecha' in df.columns:
-            df['Fecha'] = pd.to_datetime(df['Fecha'], format='%d/%m/%Y', errors='coerce')
-            # Mapeo numérico nativo de Pandas (0=Lunes, 6=Domingo) para evitar fallos por idioma del servidor
+            # Convertir dinámicamente intentando varios formatos comunes de Google Sheets
+            df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', dayfirst=True)
+            
+            # Crear los nombres de los días basándonos puramente en el índice numérico (0=Lunes, 6=Domingo)
             dias_es = {0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 3: 'Jueves', 4: 'Viernes', 5: 'Sábado', 6: 'Domingo'}
             df['Dia_Semana'] = df['Fecha'].dt.weekday.map(dias_es)
+            
+            # Si queda algún vacío por error de celda, le ponemos un valor seguro
+            df['Dia_Semana'] = df['Dia_Semana'].fillna('Por Clasificar')
 
         # 6. Conversión limpia de métricas comerciales operativas
         columnas_numericas = ['Valoraciones', 'Leads WPP', 'Leads IG', 'Cierres Agendados', 'Venta Dia Siguiente']
@@ -159,9 +164,10 @@ def cargar_ventas_diarias():
 # Carga inicial del DataFrame base
 df_base = cargar_ventas_diarias()
 
+# Asegurar columnas obligatorias en caso de fallos estructurales extremos
 if not df_base.empty:
     if 'Semana' not in df_base.columns: df_base['Semana'] = "1"
-    if 'Dia_Semana' not in df_base.columns: df_base['Dia_Semana'] = "Todos"
+    if 'Dia_Semana' not in df_base.columns: df_base['Dia_Semana'] = "Por Clasificar"
     if 'Grupo_Pais' not in df_base.columns: df_base['Grupo_Pais'] = "Por Clasificar"
 
 # ── BARRA LATERAL: FILTROS DINÁMICOS CRUZADOS ─────────────────────────────────
@@ -237,7 +243,7 @@ with tab1:
     st.markdown(f"### 📊 Resumen Ejecutivo (Semana: {semana_sel} / Día: {dia_sel} / Grupo: {grupo_sel})")
     
     if df_filtrado.empty:
-        st.warning("⚠️ No se encontraron registros para el día o los filtros seleccionados. Intenta cambiando el filtro de 'Día' o pon 'Semana' en 'Todas'.")
+        st.warning("⚠️ No se encontraron registros para los filtros seleccionados. Verifica que la fecha ingresada en Google Sheets sea válida.")
     else:
         kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
         kpi1.metric("💬 Leads WPP", f"{int(df_filtrado['Leads WPP'].sum())}")
