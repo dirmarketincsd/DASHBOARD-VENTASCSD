@@ -329,8 +329,8 @@ with tab1:
         k1.metric("💬 Leads WPP",     int(df_filtrado['Leads WPP'].sum()))
         k2.metric("📸 Leads IG",      int(df_filtrado['Leads IG'].sum()))
         k3.metric("⭐ Valoraciones",   int(df_filtrado['Valoraciones'].sum()))
-        k4.metric("📅 Agend. Mañana", int(df_filtrado['Venta Dia Siguiente'].sum()))
-        k5.metric("🏆 Cierres",       int(df_filtrado['Cierres'].sum()))
+        k4.metric("📅 Presupuestado", int(df_filtrado['Venta Dia Siguiente'].sum()))
+        k5.metric("💰 Depósitos",       int(df_filtrado['Cierres'].sum()))
         st.markdown("<br>", unsafe_allow_html=True)
 
         cols_vis = ['Fecha','Semana','Dia_Semana','Responsable','Grupo_Pais','Sede',
@@ -339,6 +339,8 @@ with tab1:
         df_show = df_filtrado[cols_ok].copy()
         if 'Fecha' in df_show.columns:
             df_show['Fecha'] = df_show['Fecha'].dt.strftime('%d/%m/%Y')
+        if 'Venta Dia Siguiente' in df_show.columns:
+            df_show = df_show.rename(columns={'Venta Dia Siguiente':'Presupuestado','Cierres':'Depósitos'})
         st.markdown("#### 📋 Registros")
         st.dataframe(df_show, use_container_width=True, hide_index=True)
         csv = df_filtrado.to_csv(index=False).encode('utf-8')
@@ -356,7 +358,7 @@ with tab1:
                     fig.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
                     st.plotly_chart(fig, use_container_width=True)
             with g2:
-                st.markdown("#### 🏆 Cierres por Comercial")
+                st.markdown("#### 💰 Depósitos por Comercial")
                 df_c = df_filtrado.groupby('Responsable')['Cierres'].sum().reset_index()
                 if df_c['Cierres'].sum() > 0:
                     fig2 = px.bar(df_c, x='Responsable', y='Cierres',
@@ -428,7 +430,7 @@ with tab2:
             st.markdown("---")
 
             # ── Barras de progreso por asesor HOY ──
-            st.markdown("#### 🏁 ¿Quién está más cerca de la meta de HOY?")
+            st.markdown("#### 🏁 ¿Quién está más cerca de la meta de HOY? (Depósitos)")
             if not df_hoy.empty and 'Responsable' in df_hoy.columns:
                 df_hoy_r = df_hoy.groupby('Responsable')['Cierres'].sum().reset_index()
                 df_hoy_r = df_hoy_r.sort_values('Cierres', ascending=False)
@@ -461,15 +463,16 @@ with tab2:
             st.markdown("---")
 
             # ── Ranking mensual ──
-            st.markdown("#### 🏆 Ranking Mensual por Asesor")
+            st.markdown("#### 🏆 Ranking Mensual por Asesor (Depósitos)")
             if not df_mes.empty and 'Responsable' in df_mes.columns:
                 df_rank = df_mes.groupby('Responsable')['Cierres'].sum().reset_index()
+                df_rank = df_rank.rename(columns={'Cierres':'Depósitos'})
                 df_rank['Meta'] = META_MENSUAL
-                df_rank['% Cumplimiento'] = (df_rank['Cierres']/META_MENSUAL*100).round(1)
-                df_rank['Faltan'] = (META_MENSUAL - df_rank['Cierres']).clip(lower=0)
-                df_rank = df_rank.sort_values('Cierres', ascending=False)
+                df_rank['% Cumplimiento'] = (df_rank['Depósitos']/META_MENSUAL*100).round(1)
+                df_rank['Faltan'] = (META_MENSUAL - df_rank['Depósitos']).clip(lower=0)
+                df_rank = df_rank.sort_values('Depósitos', ascending=False)
                 fig_rank = go.Figure()
-                fig_rank.add_trace(go.Bar(name='Cierres', x=df_rank['Responsable'], y=df_rank['Cierres'], marker_color='#00d4aa'))
+                fig_rank.add_trace(go.Bar(name='Depósitos', x=df_rank['Responsable'], y=df_rank['Depósitos'], marker_color='#00d4aa'))
                 fig_rank.add_trace(go.Bar(name='Meta', x=df_rank['Responsable'], y=df_rank['Meta'], marker_color='rgba(201,168,76,0.3)'))
                 fig_rank.update_layout(barmode='overlay', **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
                 st.plotly_chart(fig_rank, use_container_width=True)
