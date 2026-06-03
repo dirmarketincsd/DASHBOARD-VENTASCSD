@@ -49,7 +49,10 @@ hr { border-color: #c9a84c !important; opacity: 0.3; }
 
 SHEET_ID = "1-KjGMIPUGcMynGfTYM7P68E_k0ylcZYeg0Wmgwd-36Q"
 PLOT_CFG = dict(template='plotly_dark', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-EQUIPOS_BASE = {'CAROLINA': 'USA', 'DANIELA': 'España', 'EVELYN': 'España'}
+EQUIPOS_BASE  = {'CAROLINA': 'USA', 'DANIELA': 'España', 'EVELYN': 'España'}
+META_DIARIA   = 4
+META_SEMANAL  = 40
+META_MENSUAL  = 100
 
 def sheet_url(nombre):
     return f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={nombre.replace(' ','%20')}"
@@ -305,7 +308,7 @@ with col_title_h:
     </div>""", unsafe_allow_html=True)
 st.markdown("---")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📋 Ventas Diarias","🇪🇸 España Mayo","🇺🇸 USA Mayo","🌍 Global"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Ventas Diarias","🎯 Metas","🇪🇸 España Mayo","🇺🇸 USA Mayo","🌍 Global"])
 
 # ══ TAB 1 — VENTAS DIARIAS ════════════════════════════════════════════════════
 with tab1:
@@ -371,8 +374,114 @@ with tab1:
                     fig3.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
                     st.plotly_chart(fig3, use_container_width=True)
 
-# ══ TAB 2 — ESPAÑA MAYO ══════════════════════════════════════════════════════
+# ══ TAB 2 — METAS ═══════════════════════════════════════════════════════════
 with tab2:
+    st.markdown("### 🎯 Control de Metas")
+    try:
+        df_m = cargar_ventas_diarias()
+        if df_m.empty:
+            st.info("📝 Sin datos aún. Ingresa registros en la hoja 'Ventas diarias'.")
+        else:
+            hoy_ts     = pd.Timestamp(date.today())
+            inicio_sem = hoy_ts - timedelta(days=hoy_ts.weekday())
+            inicio_mes = hoy_ts.replace(day=1)
+
+            df_hoy = df_m[df_m['Fecha'].dt.date == hoy_ts.date()] if 'Fecha' in df_m.columns else pd.DataFrame()
+            df_sem = df_m[df_m['Fecha'] >= inicio_sem]            if 'Fecha' in df_m.columns else pd.DataFrame()
+            df_mes = df_m[df_m['Fecha'] >= inicio_mes]            if 'Fecha' in df_m.columns else pd.DataFrame()
+
+            asesores = sorted(df_m['Responsable'].dropna().unique().tolist()) if 'Responsable' in df_m.columns else []
+            n = max(len(asesores), 1)
+
+            c_hoy = int(df_hoy['Cierres'].sum()) if not df_hoy.empty and 'Cierres' in df_hoy.columns else 0
+            c_sem = int(df_sem['Cierres'].sum()) if not df_sem.empty and 'Cierres' in df_sem.columns else 0
+            c_mes = int(df_mes['Cierres'].sum()) if not df_mes.empty and 'Cierres' in df_mes.columns else 0
+
+            m_dia = META_DIARIA * n
+            m_sem = META_SEMANAL * n
+            m_mes = META_MENSUAL * n
+
+            st.markdown(f"**Equipo:** {n} asesor(es) · **Meta diaria:** {META_DIARIA} cierres/asesor · **Semanal:** {META_SEMANAL} · **Mensual:** {META_MENSUAL}")
+            st.markdown("---")
+
+            def tarjeta_meta(titulo, actual, meta, emoji):
+                p = min(round(actual/meta*100, 1) if meta > 0 else 0, 100)
+                color = "#00d4aa" if p >= 100 else "#f7a76c" if p >= 50 else "#ff6b6b"
+                faltan = max(meta - actual, 0)
+                st.markdown(f"""
+                <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #c9a84c;
+                            border-radius:14px;padding:18px 20px;margin-bottom:8px">
+                    <div style="color:#8b9bb4;font-size:0.75rem;text-transform:uppercase;letter-spacing:1px">{emoji} {titulo}</div>
+                    <div style="color:white;font-size:2.2rem;font-weight:800">{actual} <span style="color:#8b9bb4;font-size:1rem">/ {meta}</span></div>
+                    <div style="color:{color};font-size:0.95rem;font-weight:600">{p}% completado</div>
+                    <div style="background:#1e2340;border-radius:10px;height:12px;width:100%;margin:8px 0">
+                        <div style="height:12px;border-radius:10px;background:{color};width:{p}%"></div>
+                    </div>
+                    <div style="color:#ff6b6b;font-size:0.85rem">Faltan: <b>{faltan}</b> cierres</div>
+                </div>""", unsafe_allow_html=True)
+
+            mc1, mc2, mc3 = st.columns(3)
+            with mc1: tarjeta_meta("Meta Diaria",  c_hoy, m_dia, "📅")
+            with mc2: tarjeta_meta("Meta Semanal", c_sem, m_sem, "📆")
+            with mc3: tarjeta_meta("Meta Mensual", c_mes, m_mes, "🗓️")
+
+            st.markdown("---")
+
+            # ── Barras de progreso por asesor HOY ──
+            st.markdown("#### 🏁 ¿Quién está más cerca de la meta de HOY?")
+            if not df_hoy.empty and 'Responsable' in df_hoy.columns:
+                df_hoy_r = df_hoy.groupby('Responsable')['Cierres'].sum().reset_index()
+                df_hoy_r = df_hoy_r.sort_values('Cierres', ascending=False)
+                for _, row in df_hoy_r.iterrows():
+                    p = min(round(row['Cierres']/META_DIARIA*100, 1), 100)
+                    c = int(row['Cierres'])
+                    nombre = row['Responsable']
+                    faltan = max(META_DIARIA - c, 0)
+                    color = "#00d4aa" if p >= 100 else "#f7a76c" if p >= 60 else "#ff6b6b"
+                    estado = "✅ ¡Meta cumplida!" if p >= 100 else f"🔥 Faltan {faltan}" if p >= 60 else f"⚡ Faltan {faltan}"
+                    st.markdown(f"""
+                    <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #2a2000;
+                                border-radius:12px;padding:14px 18px;margin-bottom:10px">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                            <div style="color:white;font-weight:700;font-size:1rem">👤 {nombre}</div>
+                            <div style="color:{color};font-weight:600;font-size:0.9rem">{estado}</div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:12px">
+                            <div style="flex:1;background:#1e2340;border-radius:10px;height:14px">
+                                <div style="height:14px;border-radius:10px;background:{color};width:{p}%"></div>
+                            </div>
+                            <div style="color:#c9a84c;font-size:0.85rem;font-weight:700;min-width:90px;text-align:right">
+                                {c} / {META_DIARIA} · {p}%
+                            </div>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+            else:
+                st.info("📝 Sin cierres registrados hoy.")
+
+            st.markdown("---")
+
+            # ── Ranking mensual ──
+            st.markdown("#### 🏆 Ranking Mensual por Asesor")
+            if not df_mes.empty and 'Responsable' in df_mes.columns:
+                df_rank = df_mes.groupby('Responsable')['Cierres'].sum().reset_index()
+                df_rank['Meta'] = META_MENSUAL
+                df_rank['% Cumplimiento'] = (df_rank['Cierres']/META_MENSUAL*100).round(1)
+                df_rank['Faltan'] = (META_MENSUAL - df_rank['Cierres']).clip(lower=0)
+                df_rank = df_rank.sort_values('Cierres', ascending=False)
+                fig_rank = go.Figure()
+                fig_rank.add_trace(go.Bar(name='Cierres', x=df_rank['Responsable'], y=df_rank['Cierres'], marker_color='#00d4aa'))
+                fig_rank.add_trace(go.Bar(name='Meta', x=df_rank['Responsable'], y=df_rank['Meta'], marker_color='rgba(201,168,76,0.3)'))
+                fig_rank.update_layout(barmode='overlay', **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+                st.plotly_chart(fig_rank, use_container_width=True)
+                st.dataframe(df_rank, use_container_width=True, hide_index=True)
+            else:
+                st.info("📝 Sin datos del mes actual.")
+
+    except Exception as e:
+        st.error(f"❌ Error Metas: {e}")
+
+# ══ TAB 3 — ESPAÑA MAYO ══════════════════════════════════════════════════════
+with tab3:
     st.markdown("### 🇪🇸 Ventas España — Mayo 2026")
     df_esp = cargar_españa()
     if df_esp.empty:
@@ -428,8 +537,8 @@ with tab2:
         st.markdown("---")
         st.dataframe(df_esp, use_container_width=True, hide_index=True)
 
-# ══ TAB 3 — USA MAYO ═════════════════════════════════════════════════════════
-with tab3:
+# ══ TAB 4 — USA MAYO ═════════════════════════════════════════════════════════
+with tab4:
     st.markdown("### 🇺🇸 Ventas USA — Mayo 2026")
     df_usa = cargar_usa()
     if df_usa.empty:
@@ -483,8 +592,8 @@ with tab3:
         st.markdown("---")
         st.dataframe(df_usa, use_container_width=True, hide_index=True)
 
-# ══ TAB 4 — GLOBAL ═══════════════════════════════════════════════════════════
-with tab4:
+# ══ TAB 5 — GLOBAL ═══════════════════════════════════════════════════════════
+with tab5:
     st.markdown("### 🌍 Resumen Global — Mayo 2026")
     df_global = cargar_global()
     t_ag = df_global['Agendados'].sum(); t_re = df_global['Realizados'].sum()
