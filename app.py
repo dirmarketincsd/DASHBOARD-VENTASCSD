@@ -105,9 +105,9 @@ def cargar_ventas_diarias():
         df = pd.read_csv(url, skiprows=header_idx)
         df.columns = [str(c).strip().upper().replace('  ', ' ') for c in df.columns]
         
-        # Diccionario de normalización exacto
+        # Diccionario de normalización exacto adaptado a tus columnas actuales
         rename_dict = {
-            'FECHA': 'Fecha', 'SEMANA': 'Semana', 'RESPONSABLE': 'Responsable',
+            'FECHA': 'Fecha', 'DIA': 'Dia_Texto', 'SEMANA': 'Semana', 'RESPONSABLE': 'Responsable',
             'VALORACIONES': 'Valoraciones', 'LEADS WPP': 'Leads WPP', 'LEADS IG': 'Leads IG',
             'SEDE': 'Sede', 'CIERRES AGENDADOS': 'Cierres Agendados',
             'VENTA DIA SIGUIENTE(AGENDADOS)': 'Venta Dia Siguiente'
@@ -135,17 +135,17 @@ def cargar_ventas_diarias():
 
             df['Grupo_Pais'] = df.apply(asignar_grupo, axis=1)
             
-        # 5. PARSEO SEGURO DE FECHAS Y TRADUCCIÓN DE DÍAS (Aquí estaba el fallo)
+        # 5. ASIGNACIÓN DIRECTA DE LA NUEVA COLUMNA 'DIA' DE TU SHEET
+        if 'Dia_Texto' in df.columns:
+            # Corregimos posibles tildes o variaciones de escritura ("Miercoles" -> "Miércoles")
+            df['Dia_Semana'] = df['Dia_Texto'].astype(str).str.strip().str.capitalize()
+            df['Dia_Semana'] = df['Dia_Semana'].replace({'Miercoles': 'Miércoles', 'Sabado': 'Sábado', 'Domingo': 'Domingo'})
+        else:
+            df['Dia_Semana'] = 'Por Clasificar'
+
+        # Asegurar formato de texto plano para la fecha
         if 'Fecha' in df.columns:
-            # Convertir dinámicamente intentando varios formatos comunes de Google Sheets
-            df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', dayfirst=True)
-            
-            # Crear los nombres de los días basándonos puramente en el índice numérico (0=Lunes, 6=Domingo)
-            dias_es = {0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 3: 'Jueves', 4: 'Viernes', 5: 'Sábado', 6: 'Domingo'}
-            df['Dia_Semana'] = df['Fecha'].dt.weekday.map(dias_es)
-            
-            # Si queda algún vacío por error de celda, le ponemos un valor seguro
-            df['Dia_Semana'] = df['Dia_Semana'].fillna('Por Clasificar')
+            df['Fecha'] = df['Fecha'].astype(str).str.strip()
 
         # 6. Conversión limpia de métricas comerciales operativas
         columnas_numericas = ['Valoraciones', 'Leads WPP', 'Leads IG', 'Cierres Agendados', 'Venta Dia Siguiente']
@@ -166,9 +166,12 @@ df_base = cargar_ventas_diarias()
 
 # Asegurar columnas obligatorias en caso de fallos estructurales extremos
 if not df_base.empty:
-    if 'Semana' not in df_base.columns: df_base['Semana'] = "1"
-    if 'Dia_Semana' not in df_base.columns: df_base['Dia_Semana'] = "Por Clasificar"
-    if 'Grupo_Pais' not in df_base.columns: df_base['Grupo_Pais'] = "Por Clasificar"
+    if 'Semana' not in df_base.columns: 
+        df_base['Semana'] = "1"
+    if 'Dia_Semana' not in df_base.columns: 
+        df_base['Dia_Semana'] = "Por Clasificar"
+    if 'Grupo_Pais' not in df_base.columns: 
+        df_base['Grupo_Pais'] = "Por Clasificar"
 
 # ── BARRA LATERAL: FILTROS DINÁMICOS CRUZADOS ─────────────────────────────────
 with st.sidebar:
@@ -180,7 +183,7 @@ with st.sidebar:
     st.markdown("### 🔍 Filtrar Tabla Comercial")
     
     # 1. Filtro por Semana de Operación
-    semanas_disp = ["Todas"] + sorted(list(df_base['Semana'].dropna().unique().astype(str))) if not df_base.empty else ["Todas"]
+    semanas_disp = ["Todas"] + sorted(list(df_base['Semana'].dropna().unique().astype(str)), key=lambda x: int(x) if x.isdigit() else 0) if not df_base.empty else ["Todas"]
     semana_sel = st.selectbox("📆 Seleccionar Semana", semanas_disp)
     
     # 2. Filtro por Día de la Semana
@@ -243,7 +246,7 @@ with tab1:
     st.markdown(f"### 📊 Resumen Ejecutivo (Semana: {semana_sel} / Día: {dia_sel} / Grupo: {grupo_sel})")
     
     if df_filtrado.empty:
-        st.warning("⚠️ No se encontraron registros para los filtros seleccionados. Verifica que la fecha ingresada en Google Sheets sea válida.")
+        st.warning("⚠️ No se encontraron registros con esos filtros. Revisa si el día o la semana coinciden en tu archivo de Google Sheets.")
     else:
         kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
         kpi1.metric("💬 Leads WPP", f"{int(df_filtrado['Leads WPP'].sum())}")
@@ -263,9 +266,6 @@ with tab1:
         st.markdown("#### 📋 Registros Diarios Coordinados")
         if cols_existentes:
             df_mostrar = df_filtrado[cols_existentes].copy()
-            if 'Fecha' in df_mostrar.columns and not df_mostrar['Fecha'].isnull().all():
-                df_mostrar['Fecha'] = df_mostrar['Fecha'].dt.strftime('%d/%m/%Y')
-                
             st.dataframe(
                 df_mostrar,
                 use_container_width=True,
