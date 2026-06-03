@@ -31,7 +31,7 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght=300;400;600;700;800&display=swap');
 html, body, [class*="css"] { font-family: 'Poppins', sans-serif; }
 
-/* 🚨 CORRECCIÓN: Forzar letras blancas y legibles en toda la barra lateral */
+/* Forzar letras blancas y legibles en toda la barra lateral */
 section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
 section[data-testid="stSidebar"] h1, 
 section[data-testid="stSidebar"] h2, 
@@ -101,12 +101,11 @@ def cargar_ventas_diarias():
                 header_idx = i
                 break
         
-        # 2. Carga limpia saltando la fila combinada superior "VENTA DIARIA"
+        # 2. Carga limpia saltando la fila combinada superior
         df = pd.read_csv(url, skiprows=header_idx)
-        # Normalizar nombres de columnas limpiando espacios múltiples
         df.columns = [str(c).strip().upper().replace('  ', ' ') for c in df.columns]
         
-        # Diccionario de normalización exacto (Estructura alineada con tu Sheets)
+        # Diccionario de normalización exacto
         rename_dict = {
             'FECHA': 'Fecha', 'SEMANA': 'Semana', 'RESPONSABLE': 'Responsable',
             'VALORACIONES': 'Valoraciones', 'LEADS WPP': 'Leads WPP', 'LEADS IG': 'Leads IG',
@@ -115,13 +114,13 @@ def cargar_ventas_diarias():
         }
         df = df.rename(columns=rename_dict)
         
-        # 3. Limpieza estricta de filas vacías, totales o de texto basura
+        # 3. Limpieza de filas vacías o totales
         if 'Responsable' in df.columns:
             df = df[df['Responsable'].notna()]
             df['Responsable'] = df['Responsable'].astype(str).str.strip().str.upper()
             df = df[~df['Responsable'].isin(['', 'NAN', 'NAN/A', 'RESPONSABLE', 'TOTAL', 'TOTALES'])]
             
-            # 4. Lógica de asignación de país por Sede o Diccionario Base
+            # 4. Asignación de grupo/país
             def asignar_grupo(fila):
                 resp = str(fila.get('Responsable', '')).upper()
                 sede = str(fila.get('Sede', '')).upper()
@@ -136,13 +135,13 @@ def cargar_ventas_diarias():
 
             df['Grupo_Pais'] = df.apply(asignar_grupo, axis=1)
             
-        # 5. Formateo de Fechas y extracción del Día de la Semana
+        # 5. Formateo estructurado de Fechas y cálculo del Día de la Semana
         if 'Fecha' in df.columns:
-            df['Fecha'] = pd.to_datetime(df['Fecha'], dayfirst=True, errors='coerce')
+            df['Fecha'] = pd.to_datetime(df['Fecha'], format='%d/%m/%Y', errors='coerce')
             dias_es = {0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 3: 'Jueves', 4: 'Viernes', 5: 'Sábado', 6: 'Domingo'}
             df['Dia_Semana'] = df['Fecha'].dt.weekday.map(dias_es)
 
-        # 6. Conversión limpia de métricas comerciales operativas a números enteros
+        # 6. Conversión limpia de métricas comerciales operativas
         columnas_numericas = ['Valoraciones', 'Leads WPP', 'Leads IG', 'Cierres Agendados', 'Venta Dia Siguiente']
         for col in columnas_numericas:
             if col in df.columns:
@@ -183,7 +182,7 @@ with st.sidebar:
     # 3. Filtro de Región / Grupo Comercial
     grupo_sel = st.selectbox("🌍 Grupo / País", ["Todos", "USA", "España"])
     
-    # 4. Filtro dinámico por Responsable (depende de la región elegida arriba)
+    # 4. Filtro dinámico por Responsable
     if not df_base.empty and 'Responsable' in df_base.columns:
         if grupo_sel == "USA":
             comerciales = df_base[df_base['Grupo_Pais'] == 'USA']['Responsable'].unique().tolist()
@@ -223,24 +222,22 @@ with col_title_h:
     st.markdown("""
     <div style="padding-top:5px;text-align:left">
         <div style="color:#c9a84c;font-size:0.8rem;text-transform:uppercase;letter-spacing:3px">Colombia Smile Design</div>
-        <div style="color:#ffffff;font-size:2.2rem;font-weight:800;line-height:1.2">Dashboard de Ventas Diarias (Estilo Sheets)</div>
+        <div style="color:#ffffff;font-size:2.2rem;font-weight:800;line-height:1.2">Dashboard de Ventas Diarias</div>
     </div>""", unsafe_allow_html=True)
 
 st.markdown("---")
 
-# Estructura de Pestañas
 tab1, tab2 = st.tabs(["📋 Vista Estilo Google Sheets", "📊 Vista Global por Grupos"])
 
 # ==========================================
 # ══ TAB 1 — VISTA FILTRADA (ESTILO SHEETS) 
 # ==========================================
 with tab1:
-    st.markdown(f"### 📊 Resumen Ejecutivo ({semana_sel} / Día: {dia_sel} / Grupo: {grupo_sel})")
+    st.markdown(f"### 📊 Resumen Ejecutivo (Semana: {semana_sel} / Día: {dia_sel} / Grupo: {grupo_sel})")
     
     if df_filtrado.empty:
-        st.warning("⚠️ No se encontraron registros con la combinación de filtros seleccionada en la barra lateral.")
+        st.warning("⚠️ No se encontraron registros para el día o los filtros seleccionados. Intenta cambiando el filtro de 'Día' o pon 'Semana' en 'Todas'.")
     else:
-        # Fila superior de KPIs basados en el filtro actual
         kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
         kpi1.metric("💬 Leads WPP", f"{int(df_filtrado['Leads WPP'].sum())}")
         kpi2.metric("📸 Leads IG", f"{int(df_filtrado['Leads IG'].sum())}")
@@ -250,28 +247,24 @@ with tab1:
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # 📋 LISTA DE COLUMNAS SOLICITADAS Y FILTRO ANTIFALLOS DE SEGURIDAD
         columnas_visibles = [
             'Fecha', 'Semana', 'Dia_Semana', 'Responsable', 'Grupo_Pais', 'Sede', 
             'Leads WPP', 'Leads IG', 'Valoraciones', 'Venta Dia Siguiente', 'Cierres Agendados'
         ]
         cols_existentes = [c for c in columnas_visibles if c in df_filtrado.columns]
         
-        st.markdown("#### 📋 Registros Diario Coordinados")
+        st.markdown("#### 📋 Registros Diarios Coordinados")
         if cols_existentes:
-            df_mostrar = df_filtrado[cols_existentes]
+            df_mostrar = df_filtrado[cols_existentes].copy()
             if 'Fecha' in df_mostrar.columns and not df_mostrar['Fecha'].isnull().all():
-                df_mostrar = df_mostrar.sort_values(by='Fecha', ascending=False)
+                df_mostrar['Fecha'] = df_mostrar['Fecha'].dt.strftime('%d/%m/%Y')
                 
             st.dataframe(
                 df_mostrar,
                 use_container_width=True,
                 hide_index=True
             )
-        else:
-            st.info("No hay columnas suficientes para renderizar la tabla base.")
         
-        # Gráfica de leads protegida
         if 'Responsable' in df_filtrado.columns and not df_filtrado.empty:
             st.markdown("---")
             st.markdown("#### 📈 Leads Entrantes por Canal y Comercial")
@@ -290,8 +283,6 @@ with tab1:
                 )
                 fig_leads.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig_leads, use_container_width=True)
-            else:
-                st.info("ℹ️ No hay registros de leads comerciales mayores a 0 en el periodo seleccionado.")
 
 # ==========================================
 # ══ TAB 2 — DESGLOSE REGIONAL USA VS ESPAÑA
@@ -303,29 +294,19 @@ with tab2:
     columnas_agrupar = [c for c in ['Leads WPP', 'Leads IG', 'Valoraciones', 'Venta Dia Siguiente', 'Cierres Agendados'] if c in df_base.columns]
     
     with col_usa:
-        st.markdown("<h4 style='color:#7c6af7;'>🇺🇸 Grupo USA (Carolina y futuras integrantes)</h4>", unsafe_allow_html=True)
-        if 'Grupo_Pais' in df_base.columns and 'Responsable' in df_base.columns and not df_base.empty:
+        st.markdown("<h4 style='color:#7c6af7;'>🇺🇸 Grupo USA</h4>", unsafe_allow_html=True)
+        if not df_base.empty and 'Grupo_Pais' in df_base.columns:
             df_usa_panel = df_base[df_base['Grupo_Pais'] == 'USA']
             if not df_usa_panel.empty:
-                st.dataframe(
-                    df_usa_panel.groupby('Responsable')[columnas_agrupar].sum(),
-                    use_container_width=True
-                )
+                st.dataframe(df_usa_panel.groupby('Responsable')[columnas_agrupar].sum(), use_container_width=True)
             else:
-                st.info("No hay datos históricos acumulados para el equipo de USA.")
-        else:
-            st.caption("Esperando datos válidos desde la hoja de Sheets.")
+                st.info("No hay datos para el equipo de USA.")
             
     with col_esp:
-        st.markdown("<h4 style='color:#00d4aa;'>🇪🇸 Grupo España (Daniela, Evelyn y futuras integrantes)</h4>", unsafe_allow_html=True)
-        if 'Grupo_Pais' in df_base.columns and 'Responsable' in df_base.columns and not df_base.empty:
+        st.markdown("<h4 style='color:#00d4aa;'>🇪🇸 Grupo España</h4>", unsafe_allow_html=True)
+        if not df_base.empty and 'Grupo_Pais' in df_base.columns:
             df_esp_panel = df_base[df_base['Grupo_Pais'] == 'España']
             if not df_esp_panel.empty:
-                st.dataframe(
-                    df_esp_panel.groupby('Responsable')[columnas_agrupar].sum(),
-                    use_container_width=True
-                )
+                st.dataframe(df_esp_panel.groupby('Responsable')[columnas_agrupar].sum(), use_container_width=True)
             else:
-                st.info("No hay datos históricos acumulados para el equipo de España.")
-        else:
-            st.caption("Esperando datos válidos desde la hoja de Sheets.")
+                st.info("No hay datos para el equipo de España.")
