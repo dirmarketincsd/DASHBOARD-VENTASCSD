@@ -28,7 +28,7 @@ logo_b64 = get_logo_base64()
 # ── ESTILOS CSS PERSONALIZADOS (ESTILO PREMIUM NEGRO/DORADO) ──────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght=300;400;600;700;800&display=swap');
 html, body, [class*="css"] { font-family: 'Poppins', sans-serif; }
 
 /* Tarjetas de Métricas (KPIs) */
@@ -181,11 +181,11 @@ df_filtrado = df_base.copy()
 
 if semana_sel != "Todas":
     df_filtrado = df_filtrado[df_filtrado['Semana'].astype(str) == semana_sel]
-if dia_sel != "Todos":
+if dia_sel != "Todos" and 'Dia_Semana' in df_filtrado.columns:
     df_filtrado = df_filtrado[df_filtrado['Dia_Semana'] == dia_sel]
-if grupo_sel != "Todos":
+if grupo_sel != "Todos" and 'Grupo_Pais' in df_filtrado.columns:
     df_filtrado = df_filtrado[df_filtrado['Grupo_Pais'] == grupo_sel]
-if responsable_sel != "Todos":
+if responsable_sel != "Todos" and 'Responsable' in df_filtrado.columns:
     df_filtrado = df_filtrado[df_filtrado['Responsable'] == responsable_sel]
 
 # ── DISEÑO DE LA INTERFAZ PRINCIPAL ───────────────────────────────────────────
@@ -214,37 +214,43 @@ with tab1:
     if df_filtrado.empty:
         st.warning("⚠️ No se encontraron registros con la combinación de filtros seleccionada en la barra lateral.")
     else:
-        # Fila superior de KPIs basados en el filtro actual
+        # Fila superior de KPIs basados en el filtro actual con verificación de existencia
         kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
-        kpi1.metric("💬 Leads WPP", f"{int(df_filtrado['Leads WPP'].sum())}")
-        kpi2.metric("📸 Leads IG", f"{int(df_filtrado['Leads IG'].sum())}")
-        kpi3.metric("⭐ Valoraciones", f"{int(df_filtrado['Valoraciones'].sum())}")
-        kpi4.metric("📅 Agendados (Mañana)", f"{int(df_filtrado['Venta Dia Siguiente'].sum())}")
-        kpi5.metric("🏆 Cierres", f"{int(df_filtrado['Cierres Agendados'].sum())}")
+        kpi1.metric("💬 Leads WPP", f"{int(df_filtrado['Leads WPP'].sum()) if 'Leads WPP' in df_filtrado.columns else 0}")
+        kpi2.metric("📸 Leads IG", f"{int(df_filtrado['Leads IG'].sum()) if 'Leads IG' in df_filtrado.columns else 0}")
+        kpi3.metric("⭐ Valoraciones", f"{int(df_filtrado['Valoraciones'].sum()) if 'Valoraciones' in df_filtrado.columns else 0}")
+        kpi4.metric("📅 Agendados (Mañana)", f"{int(df_filtrado['Venta Dia Siguiente'].sum()) if 'Venta Dia Siguiente' in df_filtrado.columns else 0}")
+        kpi5.metric("🏆 Cierres", f"{int(df_filtrado['Cierres Agendados'].sum()) if 'Cierres Agendados' in df_filtrado.columns else 0}")
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Columnas coordinadas en orden exacto para visualización de tabla limpia
+        # 📋 LISTA DE COLUMNAS SOLICITADAS Y FILTRO ANTIFALLOS DE SEGURIDAD
         columnas_visibles = [
             'Fecha', 'Semana', 'Dia_Semana', 'Responsable', 'Grupo_Pais', 'Sede', 
             'Leads WPP', 'Leads IG', 'Valoraciones', 'Venta Dia Siguiente', 'Cierres Agendados'
         ]
+        cols_existentes = [c for c in columnas_visibles if c in df_filtrado.columns]
         
         st.markdown("#### 📋 Registros Diario Coordinados")
-        st.dataframe(
-            df_filtrado[columnas_visibles].sort_values(by='Fecha', ascending=False),
-            use_container_width=True,
-            hide_index=True
-        )
+        if cols_existentes:
+            st.dataframe(
+                df_filtrado[cols_existentes].sort_values(by='Fecha', ascending=False) if 'Fecha' in df_filtrado.columns else df_filtrado[cols_existentes],
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("No hay columnas coincidentes para mostrar en la tabla.")
         
         # Gráfica interactiva de Leads por canal y comercial
-        st.markdown("---")
-        st.markdown("#### 📈 Leads Entrantes por Canal y Comercial")
-        df_leads = df_filtrado.groupby('Responsable')[['Leads WPP', 'Leads IG']].sum().reset_index()
-        fig_leads = px.bar(df_leads, x='Responsable', y=['Leads WPP', 'Leads IG'],
-                           barmode='group', title="Canal de Entrada (WhatsApp vs Instagram)",
-                           color_discrete_sequence=['#00d4aa', '#7c6af7'], **PLOT_CFG)
-        st.plotly_chart(fig_leads, use_container_width=True)
+        if 'Responsable' in df_filtrado.columns and ('Leads WPP' in df_filtrado.columns or 'Leads IG' in df_filtrado.columns):
+            st.markdown("---")
+            st.markdown("#### 📈 Leads Entrantes por Canal y Comercial")
+            columnas_grafica = [c for c in ['Leads WPP', 'Leads IG'] if c in df_filtrado.columns]
+            df_leads = df_filtrado.groupby('Responsable')[columnas_grafica].sum().reset_index()
+            fig_leads = px.bar(df_leads, x='Responsable', y=columnas_grafica,
+                               barmode='group', title="Canal de Entrada (WhatsApp vs Instagram)",
+                               color_discrete_sequence=['#00d4aa', '#7c6af7'], **PLOT_CFG)
+            st.plotly_chart(fig_leads, use_container_width=True)
 
 # ==========================================
 # ══ TAB 2 — DESGLOSE REGIONAL USA VS ESPAÑA
@@ -254,24 +260,33 @@ with tab2:
     
     col_usa, col_esp = st.columns(2)
     
+    # Columnas de agrupación métrica con filtro de existencia
+    columnas_agrupar = [c for c in ['Leads WPP', 'Leads IG', 'Valoraciones', 'Venta Dia Siguiente', 'Cierres Agendados'] if c in df_base.columns]
+    
     with col_usa:
         st.markdown("<h4 style='color:#7c6af7;'>🇺🇸 Grupo USA (Carolina y futuras integrantes)</h4>", unsafe_allow_html=True)
-        df_usa_panel = df_base[df_base['Grupo_Pais'] == 'USA']
-        if not df_usa_panel.empty:
-            st.dataframe(
-                df_usa_panel.groupby('Responsable')[['Leads WPP', 'Leads IG', 'Valoraciones', 'Venta Dia Siguiente', 'Cierres Agendados']].sum(),
-                use_container_width=True
-            )
+        if 'Grupo_Pais' in df_base.columns and 'Responsable' in df_base.columns:
+            df_usa_panel = df_base[df_base['Grupo_Pais'] == 'USA']
+            if not df_usa_panel.empty:
+                st.dataframe(
+                    df_usa_panel.groupby('Responsable')[columnas_agrupar].sum(),
+                    use_container_width=True
+                )
+            else:
+                st.info("No hay datos históricos acumulados para USA.")
         else:
-            st.info("No hay datos históricos acumulados para USA.")
+            st.warning("Estructura de columnas incompleta para generar desglose.")
             
     with col_esp:
         st.markdown("<h4 style='color:#00d4aa;'>🇪🇸 Grupo España (Daniela, Evelyn y futuras integrantes)</h4>", unsafe_allow_html=True)
-        df_esp_panel = df_base[df_base['Grupo_Pais'] == 'España']
-        if not df_esp_panel.empty:
-            st.dataframe(
-                df_esp_panel.groupby('Responsable')[['Leads WPP', 'Leads IG', 'Valoraciones', 'Venta Dia Siguiente', 'Cierres Agendados']].sum(),
-                use_container_width=True
-            )
+        if 'Grupo_Pais' in df_base.columns and 'Responsable' in df_base.columns:
+            df_esp_panel = df_base[df_base['Grupo_Pais'] == 'España']
+            if not df_esp_panel.empty:
+                st.dataframe(
+                    df_esp_panel.groupby('Responsable')[columnas_agrupar].sum(),
+                    use_container_width=True
+                )
+            else:
+                st.info("No hay datos históricos acumulados para España.")
         else:
-            st.info("No hay datos históricos acumulados para España.")
+            st.warning("Estructura de columnas incompleta para generar desglose.")
