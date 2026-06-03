@@ -75,6 +75,10 @@ def cargar_ventas_diarias():
             'FECHA':'Fecha','DIA':'Dia_Texto','SEMANA':'Semana',
             'RESPONSABLE':'Responsable','VALORACIONES':'Valoraciones',
             'LEADS WPP':'Leads WPP','LEADS IG':'Leads IG','SEDE':'Sede',
+            # Nombres nuevos en el sheet
+            'DEPOSITOS':'Cierres',
+            'PRESUPUESTADO':'Venta Dia Siguiente',
+            # Nombres antiguos (compatibilidad)
             'CIERRES AGENDADOS':'Cierres',
             'VENTA DIA SIGUIENTE(AGENDADOS)':'Venta Dia Siguiente'
         }
@@ -108,8 +112,9 @@ def cargar_ventas_diarias():
         df['Semana'] = df['Semana'].astype(str).str.strip()
         for col in ['Valoraciones','Leads WPP','Leads IG','Cierres','Venta Dia Siguiente']:
             if col in df.columns:
-                df[col] = df[col].astype(str).str.replace('N/A','0',case=False).str.strip()
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+                df[col] = df[col].astype(str).str.replace('N/A','0',case=False).str.replace('','0').str.strip()
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                df[col] = df[col].clip(lower=0).astype(int)
             else:
                 df[col] = 0
         return df
@@ -396,11 +401,14 @@ with tab2:
 
             def get_cierres(df_src, desde=None, hasta=None):
                 d = df_src.copy()
-                if desde is not None:
-                    d = d[d['Fecha'].dt.date >= desde] if 'Fecha' in d.columns else d
-                if hasta is not None:
-                    d = d[d['Fecha'].dt.date <= hasta] if 'Fecha' in d.columns else d
-                return int(d['Cierres'].sum()) if 'Cierres' in d.columns and not d.empty else 0
+                if 'Fecha' in d.columns:
+                    if desde is not None:
+                        d = d[d['Fecha'].dt.date >= desde]
+                    if hasta is not None:
+                        d = d[d['Fecha'].dt.date <= hasta]
+                if 'Cierres' not in d.columns or d.empty:
+                    return 0
+                return int(pd.to_numeric(d['Cierres'], errors='coerce').fillna(0).sum())
 
             # Asesores por grupo
             asesores_esp = [r for r in df_m['Responsable'].dropna().unique() if EQUIPOS_BASE.get(r,'') == 'España'] if 'Responsable' in df_m.columns else []
