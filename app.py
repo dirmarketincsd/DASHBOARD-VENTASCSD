@@ -76,7 +76,7 @@ def cargar_ventas_diarias():
             'RESPONSABLE':'Responsable','VALORACIONES':'Valoraciones',
             'LEADS WPP':'Leads WPP','LEADS IG':'Leads IG','SEDE':'Sede',
             'CIERRES AGENDADOS':'Cierres',
-            'VENTA DIA SIGUIENTE(AGENDADOS)':'Presupuestados'
+            'VENTA DIA SIGUIENTE(AGENDADOS)':'Venta Dia Siguiente'
         }
         df = df.rename(columns=rename)
         if 'Responsable' in df.columns:
@@ -106,7 +106,7 @@ def cargar_ventas_diarias():
             df['Dia_Semana'] = 'Sin dato'
         if 'Semana' not in df.columns: df['Semana'] = '1'
         df['Semana'] = df['Semana'].astype(str).str.strip()
-        for col in ['Valoraciones','Leads WPP','Leads IG','Cierres','Presupuestado']:
+        for col in ['Valoraciones','Leads WPP','Leads IG','Cierres','Venta Dia Siguiente']:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.replace('N/A','0',case=False).str.strip()
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
