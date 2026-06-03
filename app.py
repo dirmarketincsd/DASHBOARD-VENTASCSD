@@ -23,7 +23,6 @@ def get_logo_base64():
         return None
 
 logo_b64 = get_logo_base64()
-
 marca_b64 = None
 
 st.markdown("""
@@ -93,7 +92,7 @@ def cargar_ventas_diarias():
     rename = {}
     for col in df.columns:
         u = col.upper()
-        if 'FECHA' in u:                            rename[col] = 'Fecha'
+        if 'FECHA' in u:                             rename[col] = 'Fecha'
         elif 'SEMANA' in u:                          rename[col] = 'Semana'
         elif 'RESPONSABLE' in u:                     rename[col] = 'Responsable'
         elif 'VALORACION' in u:                      rename[col] = 'Valoraciones'
@@ -184,14 +183,17 @@ with tab1:
                 st.cache_data.clear(); st.rerun()
 
         if semana_sel == "Esta semana":
-            sem_ini, sem_fin = inicio_sem_t1, fin_sem_t1
-            sem_ant_ini, sem_ant_fin = inicio_sem_ant, fin_sem_ant
-            label_sem = f"{inicio_sem_t1.strftime('%d/%m')} — {fin_sem_t1.strftime('%d/%m/%Y')}"
+            sem_ini  = pd.Timestamp(inicio_sem_t1)
+            sem_fin  = pd.Timestamp(fin_sem_t1)
+            sem_ant_ini = pd.Timestamp(inicio_sem_ant)
+            sem_ant_fin = pd.Timestamp(fin_sem_ant)
+            label_sem = f"{sem_ini.strftime('%d/%m')} — {sem_fin.strftime('%d/%m/%Y')}"
         else:
-            sem_ini, sem_fin = inicio_sem_ant, fin_sem_ant
-            sem_ant_ini = inicio_sem_ant - timedelta(days=7)
-            sem_ant_fin = inicio_sem_ant - timedelta(days=1)
-            label_sem = f"{inicio_sem_ant.strftime('%d/%m')} — {fin_sem_ant.strftime('%d/%m/%Y')}"
+            sem_ini  = pd.Timestamp(inicio_sem_ant)
+            sem_fin  = pd.Timestamp(fin_sem_ant)
+            sem_ant_ini = pd.Timestamp(inicio_sem_ant - timedelta(days=7))
+            sem_ant_fin = pd.Timestamp(inicio_sem_ant - timedelta(days=1))
+            label_sem = f"{sem_ini.strftime('%d/%m')} — {sem_fin.strftime('%d/%m/%Y')}"
 
         st.markdown(f"<div style='color:#c9a84c;font-size:0.85rem;margin-bottom:12px'>📆 Semana: <b>{label_sem}</b></div>", unsafe_allow_html=True)
 
@@ -227,7 +229,6 @@ with tab1:
                 </div>
             </div>""", unsafe_allow_html=True)
 
-            # Filtrar por sedes del grupo
             if not df.empty and 'Sede' in df.columns:
                 mask = df['Sede'].astype(str).str.strip().isin(sedes_grupo)
                 df_grupo = df[mask].copy()
@@ -239,7 +240,6 @@ with tab1:
             totales    = {m: df_sem_g[m].sum() for m in METRICAS}
             totales_ant= {m: df_ant_g[m].sum() for m in METRICAS}
 
-            # KPIs resumen
             cols_k = st.columns(5)
             for i, m in enumerate(METRICAS):
                 val = totales[m]; ant = totales_ant[m]
@@ -250,9 +250,8 @@ with tab1:
 
             st.markdown("---")
 
-            # Tabla tipo calendario semanal
             st.markdown("##### 📅 Detalle por día")
-            header_cols = st.columns([1.5] + [1]*7 + [1.2])
+            header_cols = st.columns([2] + [1]*7 + [1])
             header_cols[0].markdown("<div style='color:#c9a84c;font-size:0.75rem;font-weight:700'>MÉTRICA</div>", unsafe_allow_html=True)
             for i, dia in enumerate(DIAS):
                 fecha_dia = sem_ini + timedelta(days=i)
@@ -262,7 +261,7 @@ with tab1:
             header_cols[-1].markdown("<div style='color:#c9a84c;font-size:0.75rem;font-weight:700;text-align:center'>TOTAL</div>", unsafe_allow_html=True)
 
             for m in METRICAS:
-                row_cols = st.columns([1.5] + [1]*7 + [1.2])
+                row_cols = st.columns([2] + [1]*7 + [1])
                 row_cols[0].markdown(f"<div style='color:{COLORES[m]};font-size:0.78rem;font-weight:600;padding:6px 0'>{m}</div>", unsafe_allow_html=True)
                 total_m = 0
                 for i in range(7):
@@ -291,7 +290,6 @@ with tab1:
                     f"<div style='text-align:center;color:{color_t};font-weight:700;font-size:0.85rem;padding:4px 0'>{fmt_total}</div>",
                     unsafe_allow_html=True)
 
-            # Comparativo vs meta semanal
             st.markdown("##### 🎯 Comparativo vs Meta Semanal")
             meta_cols = st.columns(5)
             metas_sem = {'Cierres': META_SEMANAL, 'Valoraciones': META_SEMANAL,
@@ -314,17 +312,14 @@ with tab1:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-        # ── Render España ──
         SEDES_ESP = ['Alicante','Barcelona','Valencia','Madrid','Malaga','Bilbao']
         render_grupo("ESPAÑA", "🇪🇸", SEDES_ESP, "#00d4aa")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # ── Render USA ──
         SEDES_USA = ['Dallas','Houston','New Jersey','Orlando','Los Angeles']
         render_grupo("USA", "🇺🇸", SEDES_USA, "#7c6af7")
 
-        # ── Descarga CSV ──
         if not df.empty:
             st.markdown("---")
             csv = df.to_csv(index=False).encode('utf-8')
@@ -442,7 +437,6 @@ with tab2:
 with tab3:
     st.markdown("### 🇪🇸 Ventas España — Mayo 2026")
     try:
-        # Datos reales de tu hoja
         df_esp_real = pd.DataFrame({
             'Sede': ['Alicante','Barcelona','Valencia','Madrid','Malaga','Bilbao'],
             'Agendados': [10, 13.5, 6, 5.5, 20.5, 0],
@@ -503,7 +497,6 @@ with tab3:
         st.markdown("#### 📋 Resumen España Mayo 2026")
         st.dataframe(df_esp_real, use_container_width=True, hide_index=True)
 
-        # Leads España
         st.markdown("#### 💬 Leads por Sede — España")
         df_leads_esp = pd.DataFrame({
             'Sede': ['Alicante','Barcelona','Valencia','Madrid','Malaga','Bilbao'],
@@ -580,7 +573,6 @@ with tab4:
         st.markdown("#### 📋 Resumen USA Mayo 2026")
         st.dataframe(df_usa_real, use_container_width=True, hide_index=True)
 
-        # Leads USA
         st.markdown("#### 💬 Leads por Sede — USA")
         df_leads_usa = pd.DataFrame({
             'Sede': ['Dallas','Houston','New Jersey','Orlando','Los Angeles'],
@@ -612,14 +604,15 @@ with tab5:
         })
         df_global = pd.concat([df_esp_g, df_usa_g], ignore_index=True)
         df_global['% Conversión'] = (df_global['Realizados'] / df_global['Agendados'] * 100).round(1).fillna(0)
+        df_global['% Conversión'] = df_global['% Conversión'].replace([float('inf'), float('-inf')], 0)
 
         total_ag = df_global['Agendados'].sum()
         total_re = df_global['Realizados'].sum()
         total_e  = df_esp_g['Realizados'].sum()
         total_u  = df_usa_g['Realizados'].sum()
-        conv_g   = round(total_re / total_ag * 100, 1)
+        conv_g   = round(total_re / total_ag * 100, 1) if total_ag > 0 else 0
 
-        g1,g2,g3,g4,g5 = st.columns(5)
+        g1, g2, g3, g4, g5 = st.columns(5)
         g1.metric("🌍 Total Sedes",    11)
         g2.metric("📅 Total Agendados",f"{total_ag:.1f}")
         g3.metric("✅ Total Realizados",f"{total_re:.1f}")
@@ -630,40 +623,34 @@ with tab5:
         col_g1, col_g2 = st.columns(2)
         with col_g1:
             st.markdown("#### 📊 Realizados por Sede — Global")
-            fig_all = px.bar(df_global.sort_values('Realizados',ascending=True),
-                             x='Realizados', y='Sede', orientation='h',
-                             color='País', color_discrete_map={'🇪🇸 España':'#00d4aa','🇺🇸 USA':'#7c6af7'})
+            df_global_sorted = df_global.sort_values(by='Realizados', ascending=False)
+            fig_all = px.bar(
+                df_global_sorted, 
+                x='Sede', 
+                y='Realizados',
+                color='País',
+                color_discrete_map={'🇪🇸 España': '#00d4aa', '🇺🇸 USA': '#7c6af7'},
+                text='Realizados'
+            )
             fig_all.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
             st.plotly_chart(fig_all, use_container_width=True)
+            
         with col_g2:
-            st.markdown("#### 🌍 España vs USA — Realizados")
-            df_pais = pd.DataFrame({'País':['🇪🇸 España','🇺🇸 USA'],'Total':[total_e,total_u]})
-            fig_pais = px.pie(df_pais, values='Total', names='País', hole=0.5,
-                              color_discrete_sequence=['#00d4aa','#7c6af7'])
-            fig_pais.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
-            st.plotly_chart(fig_pais, use_container_width=True)
-
-        col_g3, col_g4 = st.columns(2)
-        with col_g3:
-            st.markdown("#### 📈 Agendados vs Realizados — Global")
-            fig_g3 = go.Figure()
-            fig_g3.add_trace(go.Bar(name='Agendados', x=df_global['Sede'], y=df_global['Agendados'], marker_color='rgba(124,106,247,0.6)'))
-            fig_g3.add_trace(go.Bar(name='Realizados', x=df_global['Sede'], y=df_global['Realizados'], marker_color='#00d4aa'))
-            fig_g3.update_layout(barmode='group', **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
-            st.plotly_chart(fig_g3, use_container_width=True)
-        with col_g4:
-            st.markdown("#### 📊 % Conversión por Sede")
-            df_cv = df_global[df_global['Agendados'] > 0]
-            fig_g4 = px.bar(df_cv, x='Sede', y='% Conversión',
-                            color='País', text='% Conversión',
-                            color_discrete_map={'🇪🇸 España':'#00d4aa','🇺🇸 USA':'#7c6af7'})
-            fig_g4.update_traces(texttemplate='%{text}%')
-            fig_g4.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
-            st.plotly_chart(fig_g4, use_container_width=True)
+            st.markdown("#### 🍩 Proporción Global por País")
+            fig_pie_g = px.pie(
+                df_global, 
+                values='Realizados', 
+                names='País', 
+                hole=0.5,
+                color='País',
+                color_discrete_map={'🇪🇸 España': '#00d4aa', '🇺🇸 USA': '#7c6af7'}
+            )
+            fig_pie_g.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+            st.plotly_chart(fig_pie_g, use_container_width=True)
 
         st.markdown("---")
-        st.markdown("#### 📋 Detalle Completo por Sede")
-        st.dataframe(df_global.sort_values(['País','Realizados'],ascending=[True,False]),
-                     use_container_width=True, hide_index=True)
+        st.markdown("#### 📋 Consolidado General de Sedes")
+        st.dataframe(df_global, use_container_width=True, hide_index=True)
+
     except Exception as e:
         st.error(f"❌ Error Global: {e}")
