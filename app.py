@@ -135,9 +135,10 @@ def cargar_ventas_diarias():
 
             df['Grupo_Pais'] = df.apply(asignar_grupo, axis=1)
             
-        # 5. Formateo estructurado de Fechas y cálculo del Día de la Semana
+        # 5. Formateo estructurado de Fechas y cálculo del Día de la Semana con mapeo robusto
         if 'Fecha' in df.columns:
             df['Fecha'] = pd.to_datetime(df['Fecha'], format='%d/%m/%Y', errors='coerce')
+            # Mapeo numérico nativo de Pandas (0=Lunes, 6=Domingo) para evitar fallos por idioma del servidor
             dias_es = {0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 3: 'Jueves', 4: 'Viernes', 5: 'Sábado', 6: 'Domingo'}
             df['Dia_Semana'] = df['Fecha'].dt.weekday.map(dias_es)
 
