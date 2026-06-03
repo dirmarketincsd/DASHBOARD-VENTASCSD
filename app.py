@@ -164,83 +164,159 @@ with tab1:
     try:
         df = cargar_ventas_diarias()
 
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            resps = ["Todos"] + sorted(df['Responsable'].dropna().unique().tolist()) if 'Responsable' in df.columns and not df.empty else ["Todos"]
-            resp_sel = st.selectbox("👤 Responsable", resps)
-        with col_f2:
-            sedes = ["Todas"] + sorted(df['Sede'].dropna().unique().tolist()) if 'Sede' in df.columns and not df.empty else ["Todas"]
-            sede_sel = st.selectbox("📍 Sede", sedes)
+        # ── Selector de semana ──
+        hoy_t1 = pd.Timestamp(date.today())
+        inicio_sem_t1 = hoy_t1 - timedelta(days=hoy_t1.weekday())
+        fin_sem_t1    = inicio_sem_t1 + timedelta(days=6)
+        inicio_sem_ant = inicio_sem_t1 - timedelta(days=7)
+        fin_sem_ant    = inicio_sem_t1 - timedelta(days=1)
 
-        df_f = df.copy()
-        if 'Fecha' in df_f.columns and not df_f.empty:
-            df_f = df_f[(df_f['Fecha'] >= f_ini) & (df_f['Fecha'] <= f_fin)]
-        if resp_sel != "Todos" and 'Responsable' in df_f.columns:
-            df_f = df_f[df_f['Responsable'] == resp_sel]
-        if sede_sel != "Todas" and 'Sede' in df_f.columns:
-            df_f = df_f[df_f['Sede'] == sede_sel]
+        col_sw1, col_sw2 = st.columns([2,1])
+        with col_sw1:
+            semana_sel = st.radio("📅 Semana a visualizar", ["Esta semana", "Semana anterior"], horizontal=True)
+        with col_sw2:
+            if st.button("🔄 Refrescar"):
+                st.cache_data.clear(); st.rerun()
 
-        st.markdown("#### 📈 Métricas del Período")
-        k1,k2,k3,k4,k5,k6 = st.columns(6)
-        cierres   = df_f['Cierres'].sum()      if 'Cierres'      in df_f.columns else 0
-        valor     = df_f['Valoraciones'].sum()  if 'Valoraciones'  in df_f.columns else 0
-        leads_wpp = df_f['Leads WPP'].sum()    if 'Leads WPP'    in df_f.columns else 0
-        leads_ig  = df_f['Leads IG'].sum()     if 'Leads IG'     in df_f.columns else 0
-        v_sem     = df_f['Venta Semanal'].sum() if 'Venta Semanal' in df_f.columns else 0
-        v_dia     = df_f['Venta Diaria'].sum()  if 'Venta Diaria'  in df_f.columns else 0
-
-        k1.metric("🏆 Cierres",       int(cierres))
-        k2.metric("⭐ Valoraciones",  int(valor))
-        k3.metric("💬 Leads WPP",     int(leads_wpp))
-        k4.metric("📸 Leads IG",      int(leads_ig))
-        k5.metric("💰 Venta Semanal", f"${v_sem:,.0f}")
-        k6.metric("📅 Venta Diaria",  f"${v_dia:,.0f}")
-
-        st.markdown("---")
-
-        if df_f.empty:
-            st.info("📝 Aún no hay datos en la hoja 'Ventas diarias'. Empieza a ingresar registros y aparecerán aquí automáticamente.")
+        if semana_sel == "Esta semana":
+            sem_ini, sem_fin = inicio_sem_t1, fin_sem_t1
+            sem_ant_ini, sem_ant_fin = inicio_sem_ant, fin_sem_ant
+            label_sem = f"{inicio_sem_t1.strftime('%d/%m')} — {fin_sem_t1.strftime('%d/%m/%Y')}"
         else:
-            gc1, gc2 = st.columns(2)
-            with gc1:
-                st.markdown("#### 👤 Cierres por Responsable")
-                if 'Responsable' in df_f.columns and 'Cierres' in df_f.columns:
-                    d = df_f.groupby('Responsable')['Cierres'].sum().reset_index()
-                    fig = px.bar(d, x='Responsable', y='Cierres', color='Cierres', color_continuous_scale='teal')
-                    fig.update_layout(coloraxis_showscale=False, **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
-                    st.plotly_chart(fig, use_container_width=True)
-            with gc2:
-                st.markdown("#### 📣 Leads por Canal")
-                if (leads_wpp + leads_ig) > 0:
-                    df_c = pd.DataFrame({'Canal':['WhatsApp','Instagram'],'Total':[leads_wpp,leads_ig]})
-                    fig2 = px.pie(df_c, values='Total', names='Canal', hole=0.55,
-                                  color_discrete_sequence=['#00d4aa','#7c6af7'])
-                    fig2.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
-                    st.plotly_chart(fig2, use_container_width=True)
+            sem_ini, sem_fin = inicio_sem_ant, fin_sem_ant
+            sem_ant_ini = inicio_sem_ant - timedelta(days=7)
+            sem_ant_fin = inicio_sem_ant - timedelta(days=1)
+            label_sem = f"{inicio_sem_ant.strftime('%d/%m')} — {fin_sem_ant.strftime('%d/%m/%Y')}"
 
-            gc3, gc4 = st.columns(2)
-            with gc3:
-                st.markdown("#### 📍 Cierres por Sede")
-                if 'Sede' in df_f.columns and 'Cierres' in df_f.columns:
-                    d3 = df_f.groupby('Sede')['Cierres'].sum().reset_index().sort_values('Cierres',ascending=True)
-                    fig3 = px.bar(d3, x='Cierres', y='Sede', orientation='h',
-                                  color='Cierres', color_continuous_scale='purples')
-                    fig3.update_layout(coloraxis_showscale=False, **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
-                    st.plotly_chart(fig3, use_container_width=True)
-            with gc4:
-                st.markdown("#### 📈 Evolución de Cierres")
-                if 'Fecha' in df_f.columns and 'Cierres' in df_f.columns:
-                    d4 = df_f.groupby('Fecha')['Cierres'].sum().reset_index()
-                    fig4 = px.line(d4, x='Fecha', y='Cierres', color_discrete_sequence=['#00d4aa'], markers=True)
-                    fig4.update_traces(fill='tozeroy', fillcolor='rgba(0,212,170,0.08)')
-                    fig4.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
-                    st.plotly_chart(fig4, use_container_width=True)
+        st.markdown(f"<div style='color:#c9a84c;font-size:0.85rem;margin-bottom:12px'>📆 Semana: <b>{label_sem}</b></div>", unsafe_allow_html=True)
+
+        DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
+        METRICAS = ['Cierres','Valoraciones','Leads WPP','Leads IG','Venta Diaria']
+        COLORES  = {'Cierres':'#00d4aa','Valoraciones':'#f0d080','Leads WPP':'#7c6af7','Leads IG':'#f7a76c','Venta Diaria':'#4fc3f7'}
+
+        def build_semana(df_src, sem_ini, sem_fin):
+            dias = pd.date_range(sem_ini, sem_fin, freq='D')
+            rows = []
+            for d in dias:
+                fila = {'Fecha': d, 'Dia': DIAS[d.weekday()]}
+                sub = df_src[df_src['Fecha'] == d] if 'Fecha' in df_src.columns and not df_src.empty else pd.DataFrame()
+                for m in METRICAS:
+                    fila[m] = sub[m].sum() if m in sub.columns and not sub.empty else 0
+                rows.append(fila)
+            return pd.DataFrame(rows)
+
+        def render_grupo(titulo, bandera, sedes_grupo, color_header):
+            st.markdown(f"""
+            <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #c9a84c;
+                        border-radius:14px;padding:16px 20px;margin-bottom:6px">
+                <div style="color:{color_header};font-size:1.1rem;font-weight:800;letter-spacing:1px">
+                    {bandera} {titulo}
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+            # Filtrar por sedes del grupo
+            if not df.empty and 'Sede' in df.columns:
+                mask = df['Sede'].astype(str).str.strip().isin(sedes_grupo)
+                df_grupo = df[mask].copy()
+            else:
+                df_grupo = df.copy()
+
+            df_sem_g   = build_semana(df_grupo, sem_ini, sem_fin)
+            df_ant_g   = build_semana(df_grupo, sem_ant_ini, sem_ant_fin)
+            totales    = {m: df_sem_g[m].sum() for m in METRICAS}
+            totales_ant= {m: df_ant_g[m].sum() for m in METRICAS}
+
+            # KPIs resumen
+            cols_k = st.columns(5)
+            for i, m in enumerate(METRICAS):
+                val = totales[m]; ant = totales_ant[m]
+                delta = val - ant
+                fmt = f"${val:,.0f}" if m == 'Venta Diaria' else f"{int(val)}"
+                delta_fmt = f"{'+'if delta>=0 else ''}{int(delta)}" if m != 'Venta Diaria' else f"{'+'if delta>=0 else ''}${delta:,.0f}"
+                cols_k[i].metric(f"{COLORES[m][0]} {m}", fmt, delta_fmt)
 
             st.markdown("---")
-            st.markdown("#### 📋 Detalle Diario")
-            st.dataframe(df_f, use_container_width=True, hide_index=True)
-            csv = df_f.to_csv(index=False).encode('utf-8')
-            st.download_button("⬇️ Descargar CSV", data=csv, file_name=f"ventas_{date.today()}.csv", mime="text/csv")
+
+            # Tabla tipo calendario semanal
+            st.markdown("##### 📅 Detalle por día")
+            header_cols = st.columns([1.5] + [1]*7 + [1.2])
+            header_cols[0].markdown("<div style='color:#c9a84c;font-size:0.75rem;font-weight:700'>MÉTRICA</div>", unsafe_allow_html=True)
+            for i, dia in enumerate(DIAS):
+                fecha_dia = sem_ini + timedelta(days=i)
+                es_hoy = fecha_dia.date() == date.today()
+                estilo = "color:#00d4aa;font-weight:800" if es_hoy else "color:#8b9bb4"
+                header_cols[i+1].markdown(f"<div style='{estilo};font-size:0.75rem;text-align:center'>{dia}<br>{fecha_dia.strftime('%d/%m')}</div>", unsafe_allow_html=True)
+            header_cols[-1].markdown("<div style='color:#c9a84c;font-size:0.75rem;font-weight:700;text-align:center'>TOTAL</div>", unsafe_allow_html=True)
+
+            for m in METRICAS:
+                row_cols = st.columns([1.5] + [1]*7 + [1.2])
+                row_cols[0].markdown(f"<div style='color:{COLORES[m]};font-size:0.78rem;font-weight:600;padding:6px 0'>{m}</div>", unsafe_allow_html=True)
+                total_m = 0
+                for i in range(7):
+                    val = df_sem_g.iloc[i][m]
+                    ant_val = df_ant_g.iloc[i][m]
+                    total_m += val
+                    fecha_dia = sem_ini + timedelta(days=i)
+                    es_hoy = fecha_dia.date() == date.today()
+                    bg = "rgba(0,212,170,0.08)" if es_hoy else "transparent"
+                    if val > 0 and ant_val > 0:
+                        if val > ant_val: ind = "🔼"
+                        elif val < ant_val: ind = "🔽"
+                        else: ind = "➡️"
+                    else:
+                        ind = ""
+                    fmt_val = f"${val:,.0f}" if m == 'Venta Diaria' else f"{int(val)}" if val > 0 else "—"
+                    row_cols[i+1].markdown(
+                        f"<div style='text-align:center;background:{bg};border-radius:6px;padding:4px 2px;"
+                        f"font-size:0.82rem;color:white'>{fmt_val} {ind}</div>",
+                        unsafe_allow_html=True)
+                fmt_total = f"${total_m:,.0f}" if m == 'Venta Diaria' else f"{int(total_m)}"
+                ant_total = totales_ant[m]
+                delta_t = total_m - ant_total
+                color_t = "#00d4aa" if delta_t >= 0 else "#ff6b6b"
+                row_cols[-1].markdown(
+                    f"<div style='text-align:center;color:{color_t};font-weight:700;font-size:0.85rem;padding:4px 0'>{fmt_total}</div>",
+                    unsafe_allow_html=True)
+
+            # Comparativo vs meta semanal
+            st.markdown("##### 🎯 Comparativo vs Meta Semanal")
+            meta_cols = st.columns(5)
+            metas_sem = {'Cierres': META_SEMANAL, 'Valoraciones': META_SEMANAL,
+                         'Leads WPP': 50, 'Leads IG': 100, 'Venta Diaria': 0}
+            for i, m in enumerate(METRICAS):
+                meta = metas_sem[m]
+                if meta > 0:
+                    val = totales[m]
+                    p = min(round(val / meta * 100, 1), 100)
+                    color = "#00d4aa" if p >= 100 else "#f7a76c" if p >= 50 else "#ff6b6b"
+                    meta_cols[i].markdown(f"""
+                    <div style="background:#0d0d0d;border:1px solid #2a2000;border-radius:10px;padding:10px;text-align:center">
+                        <div style="color:#8b9bb4;font-size:0.7rem">{m}</div>
+                        <div style="color:{color};font-weight:700;font-size:1rem">{p}%</div>
+                        <div style="background:#1e2340;border-radius:6px;height:8px;margin-top:4px">
+                            <div style="height:8px;border-radius:6px;background:{color};width:{p}%"></div>
+                        </div>
+                        <div style="color:#8b9bb4;font-size:0.65rem;margin-top:3px">{int(val)} / {meta}</div>
+                    </div>""", unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+        # ── Render España ──
+        SEDES_ESP = ['Alicante','Barcelona','Valencia','Madrid','Malaga','Bilbao']
+        render_grupo("ESPAÑA", "🇪🇸", SEDES_ESP, "#00d4aa")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ── Render USA ──
+        SEDES_USA = ['Dallas','Houston','New Jersey','Orlando','Los Angeles']
+        render_grupo("USA", "🇺🇸", SEDES_USA, "#7c6af7")
+
+        # ── Descarga CSV ──
+        if not df.empty:
+            st.markdown("---")
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button("⬇️ Descargar CSV completo", data=csv, file_name=f"ventas_{date.today()}.csv", mime="text/csv")
+
     except Exception as e:
         st.error(f"❌ Error: {e}")
 
@@ -287,6 +363,48 @@ with tab2:
         with m1: tarjeta("Meta Diaria",  c_hoy, m_dia, "📅")
         with m2: tarjeta("Meta Semanal", c_sem, m_sem, "📆")
         with m3: tarjeta("Meta Mensual", c_mes, m_mes, "🗓️")
+
+        st.markdown("---")
+        st.markdown("#### 🏁 ¿Quién está más cerca de la meta de HOY?")
+        if not df_hoy.empty and 'Responsable' in df_hoy.columns and 'Cierres' in df_hoy.columns:
+            df_hoy_rank = df_hoy.groupby('Responsable')['Cierres'].sum().reset_index()
+            df_hoy_rank['% Meta Diaria'] = (df_hoy_rank['Cierres'] / META_DIARIA * 100).round(1).clip(upper=100)
+            df_hoy_rank = df_hoy_rank.sort_values('% Meta Diaria', ascending=False)
+
+            for _, row in df_hoy_rank.iterrows():
+                p = row['% Meta Diaria']
+                cierres = int(row['Cierres'])
+                nombre = row['Responsable']
+                faltan = max(META_DIARIA - cierres, 0)
+                if p >= 100:
+                    color = "#00d4aa"
+                    estado = "✅ ¡Meta cumplida!"
+                elif p >= 60:
+                    color = "#f7a76c"
+                    estado = f"🔥 Faltan {faltan} cierres"
+                else:
+                    color = "#ff6b6b"
+                    estado = f"⚡ Faltan {faltan} cierres"
+
+                st.markdown(f"""
+                <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #2a2000;
+                            border-radius:12px;padding:14px 18px;margin-bottom:10px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <div style="color:white;font-weight:700;font-size:1rem">👤 {nombre}</div>
+                        <div style="color:{color};font-weight:600;font-size:0.9rem">{estado}</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px">
+                        <div style="flex:1;background:#1e2340;border-radius:10px;height:14px">
+                            <div style="height:14px;border-radius:10px;background:{color};width:{p}%;
+                                        transition:width 0.5s ease"></div>
+                        </div>
+                        <div style="color:#c9a84c;font-size:0.85rem;font-weight:700;min-width:80px;text-align:right">
+                            {cierres} / {META_DIARIA} · {p}%
+                        </div>
+                    </div>
+                </div>""", unsafe_allow_html=True)
+        else:
+            st.info("📝 Aún no hay datos de cierres para hoy.")
 
         st.markdown("---")
         st.markdown("#### 🏆 Ranking de Comerciales — Mes Actual")
