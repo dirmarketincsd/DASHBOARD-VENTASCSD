@@ -75,10 +75,22 @@ META_MENSUAL = 150
 PLOT_CFG = dict(template='plotly_dark', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
 
 @st.cache_data(ttl=180)
-def cargar_hoja(nombre, skiprows=0):
+def cargar_hoja(nombre):
     try:
+        # Cargamos la hoja completa sin saltar filas inicialmente para analizar la estructura masiva
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={nombre.replace(' ','%20')}"
-        df = pd.read_csv(url, skiprows=skiprows)
+        df = pd.read_csv(url, header=None)
+        
+        # Encontrar la fila que contiene los encabezados reales analizando las primeras 10 filas
+        header_idx = 0
+        for i in range(min(10, len(df))):
+            fila_str = df.iloc[i].astype(str).str.upper().values
+            if any('FECHA' in f or 'RESPONSABLE' in f for f in fila_str):
+                header_idx = i
+                break
+        
+        # Recargar el dataframe definiendo correctamente la fila de encabezados encontrada
+        df = pd.read_csv(url, skiprows=header_idx)
         df.columns = [str(c).strip() for c in df.columns]
         return df
     except Exception as e:
@@ -86,9 +98,10 @@ def cargar_hoja(nombre, skiprows=0):
 
 @st.cache_data(ttl=180)
 def cargar_ventas_diarias():
-    df = cargar_hoja("Ventas diarias", skiprows=1)
+    df = cargar_hoja("Ventas diarias")
     if df.empty:
         return df
+        
     rename = {}
     for col in df.columns:
         u = col.upper()
@@ -104,14 +117,20 @@ def cargar_ventas_diarias():
         elif 'SEMANAL' in u and 'DIARIA' not in u:   rename[col] = 'Venta Semanal'
         elif 'DIARIA' in u:                          rename[col] = 'Venta Diaria'
         elif 'META' in u:                            rename[col] = 'Meta Mensual'
+        
     df = df.rename(columns=rename)
+    
     if 'Responsable' in df.columns:
         df = df[df['Responsable'].notna()]
         df = df[~df['Responsable'].astype(str).str.strip().isin(['','nan'])]
+        
     if 'Fecha' in df.columns:
         df['Fecha'] = pd.to_datetime(df['Fecha'], dayfirst=True, errors='coerce')
+        
     for col in ['Valoraciones','Leads WPP','Leads IG','Cierres','Venta Dia Siguiente','Venta Semanal','Venta Diaria']:
         if col in df.columns:
+            # Reemplazar valores de texto comunes como 'N/A' o vacíos por 0 antes de convertir a número
+            df[col] = df[col].astype(str).str.replace('N/A', '0', case=False).str.strip()
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     return df
 
