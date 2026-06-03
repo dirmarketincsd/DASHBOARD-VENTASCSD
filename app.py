@@ -329,7 +329,7 @@ with tab1:
         k1.metric("💬 Leads WPP",     int(df_filtrado['Leads WPP'].sum()))
         k2.metric("📸 Leads IG",      int(df_filtrado['Leads IG'].sum()))
         k3.metric("⭐ Valoraciones",   int(df_filtrado['Valoraciones'].sum()))
-        k4.metric("📅 Agend. Mañana", int(df_filtrado['Presupuestado'].sum()))
+        k4.metric("📅 Agend. Mañana", int(df_filtrado['Venta Dia Siguiente'].sum()))
         k5.metric("🏆 Cierres",       int(df_filtrado['Cierres'].sum()))
         st.markdown("<br>", unsafe_allow_html=True)
 
