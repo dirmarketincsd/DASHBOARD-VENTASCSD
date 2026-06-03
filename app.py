@@ -397,12 +397,16 @@ with tab2:
         e3,e4 = st.columns(2)
         with e3:
             st.markdown("#### 📊 % Conversión por Sede")
-            df_conv = df_esp[df_esp['Agendados']>0]
-            fig_e3 = px.bar(df_conv, x='Sede', y='% Conversión', color='% Conversión',
-                            color_continuous_scale='teal', text='% Conversión')
-            fig_e3.update_traces(texttemplate='%{text}%')
-            fig_e3.update_layout(coloraxis_showscale=False, **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
-            st.plotly_chart(fig_e3, use_container_width=True)
+            df_conv = df_esp[df_esp['Agendados']>0].copy()
+            df_conv['% Conversión'] = pd.to_numeric(df_conv['% Conversión'], errors='coerce').fillna(0)
+            if not df_conv.empty and df_conv['% Conversión'].sum() > 0:
+                fig_e3 = px.bar(df_conv, x='Sede', y='% Conversión', color='% Conversión',
+                                color_continuous_scale='teal', text='% Conversión')
+                fig_e3.update_traces(texttemplate='%{text}%')
+                fig_e3.update_layout(coloraxis_showscale=False, **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+                st.plotly_chart(fig_e3, use_container_width=True)
+            else:
+                st.info("Sin datos de conversión.")
         with e4:
             st.markdown("#### 💬 Leads por Sede")
             df_leads_esp = pd.DataFrame({
@@ -449,11 +453,16 @@ with tab3:
         u3,u4 = st.columns(2)
         with u3:
             st.markdown("#### 📊 % Conversión por Sede")
-            fig_u3 = px.bar(df_usa, x='Sede', y='% Conversión', color='% Conversión',
-                            color_continuous_scale='purples', text='% Conversión')
-            fig_u3.update_traces(texttemplate='%{text}%')
-            fig_u3.update_layout(coloraxis_showscale=False, **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
-            st.plotly_chart(fig_u3, use_container_width=True)
+            df_usa_conv = df_usa[df_usa['Agendados']>0].copy()
+            df_usa_conv['% Conversión'] = pd.to_numeric(df_usa_conv['% Conversión'], errors='coerce').fillna(0)
+            if not df_usa_conv.empty and df_usa_conv['% Conversión'].sum() > 0:
+                fig_u3 = px.bar(df_usa_conv, x='Sede', y='% Conversión', color='% Conversión',
+                                color_continuous_scale='purples', text='% Conversión')
+                fig_u3.update_traces(texttemplate='%{text}%')
+                fig_u3.update_layout(coloraxis_showscale=False, **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+                st.plotly_chart(fig_u3, use_container_width=True)
+            else:
+                st.info("Sin datos de conversión.")
         with u4:
             st.markdown("#### 💬 Leads por Sede")
             df_leads_usa = pd.DataFrame({
@@ -507,13 +516,17 @@ with tab4:
         st.plotly_chart(fig_g3, use_container_width=True)
     with col4:
         st.markdown("#### 📊 % Conversión por Sede")
-        df_cv = df_global[df_global['Agendados']>0]
-        fig_g4 = px.bar(df_cv, x='Sede', y='% Conversión', color='País',
-                        text='% Conversión',
-                        color_discrete_map={'🇪🇸 España':'#00d4aa','🇺🇸 USA':'#7c6af7'})
-        fig_g4.update_traces(texttemplate='%{text}%')
-        fig_g4.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
-        st.plotly_chart(fig_g4, use_container_width=True)
+        df_cv = df_global[df_global['Agendados']>0].copy()
+        df_cv['% Conversión'] = pd.to_numeric(df_cv['% Conversión'], errors='coerce').fillna(0)
+        if not df_cv.empty and df_cv['% Conversión'].sum() > 0:
+            fig_g4 = px.bar(df_cv, x='Sede', y='% Conversión', color='País',
+                            text='% Conversión',
+                            color_discrete_map={'🇪🇸 España':'#00d4aa','🇺🇸 USA':'#7c6af7'})
+            fig_g4.update_traces(texttemplate='%{text}%')
+            fig_g4.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+            st.plotly_chart(fig_g4, use_container_width=True)
+        else:
+            st.info("Sin datos de conversión.")
     st.markdown("---")
     st.dataframe(df_global.sort_values(['País','Realizados'],ascending=[True,False]),
                  use_container_width=True, hide_index=True)
