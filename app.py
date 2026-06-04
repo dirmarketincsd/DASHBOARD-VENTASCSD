@@ -371,98 +371,67 @@ with tab1:
         st.download_button("⬇️ Descargar CSV", data=csv, file_name=f"ventas_{date.today()}.csv", mime="text/csv")
         st.markdown("---")
 
-        # ══ EMBUDOS DE VENTAS ══════════════════════════════════════════════
+        st.markdown("---")
         st.markdown("### 🔻 Embudos de Ventas")
-        emb_col1, emb_col2 = st.columns(2)
 
-        def render_embudo(titulo, etapas, valores, color_top, color_bot):
-            st.markdown(f"""<div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);
-                border:1px solid {color_top};border-radius:14px;padding:16px 20px;margin-bottom:10px">
-                <div style="color:{color_top};font-size:1rem;font-weight:800;margin-bottom:14px">{titulo}</div>
-            </div>""", unsafe_allow_html=True)
-            max_val = max(valores) if max(valores) > 0 else 1
-            n = len(etapas)
-            for i, (etapa, val) in enumerate(zip(etapas, valores)):
-                pct_ancho = max(20, int(val / max_val * 100))
-                # Color gradiente de arriba a abajo
-                r1,g1,b1 = int(color_top[1:3],16), int(color_top[3:5],16), int(color_top[5:7],16)
-                r2,g2,b2 = int(color_bot[1:3],16), int(color_bot[3:5],16), int(color_bot[5:7],16)
-                t = i/(n-1) if n > 1 else 0
-                r = int(r1 + (r2-r1)*t); g = int(g1 + (g2-g1)*t); b = int(b1 + (b2-b1)*t)
-                color_actual = f"#{r:02x}{g:02x}{b:02x}"
-                conv = f" · {round(val/valores[i-1]*100,1)}% conv." if i > 0 and valores[i-1] > 0 else ""
-                st.markdown(f"""
-                <div style="margin-bottom:6px">
-                    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-                        <span style="color:#c9a84c;font-size:0.78rem;font-weight:600">{etapa}</span>
-                        <span style="color:white;font-size:0.78rem;font-weight:700">{val}{conv}</span>
-                    </div>
-                    <div style="background:#1e2340;border-radius:6px;height:28px;width:100%;position:relative">
-                        <div style="height:28px;border-radius:6px;background:{color_actual};
-                                    width:{pct_ancho}%;display:flex;align-items:center;padding-left:8px">
-                        </div>
-                    </div>
-                </div>""", unsafe_allow_html=True)
+        def render_embudo_horizontal(titulo, etapas_vals, color_borde, color_etapa):
+            st.markdown(f'<div style="color:{color_borde};font-size:0.8rem;font-weight:800;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px">{titulo}</div>', unsafe_allow_html=True)
+            n = len(etapas_vals)
+            cols = st.columns(n * 2 - 1)
+            for i, (etapa, val) in enumerate(etapas_vals):
+                with cols[i * 2]:
+                    st.markdown(f"""
+                    <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color_borde};
+                                border-radius:12px;padding:12px 8px;text-align:center;min-height:80px">
+                        <div style="color:#8b9bb4;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">{etapa}</div>
+                        <div style="color:{color_etapa};font-size:1.6rem;font-weight:800;line-height:1">{val}</div>
+                    </div>""", unsafe_allow_html=True)
+                if i < n - 1:
+                    with cols[i * 2 + 1]:
+                        st.markdown(f"""
+                        <div style="display:flex;align-items:center;justify-content:center;height:80px;margin-top:0px">
+                            <span style="color:{color_borde};font-size:1.4rem">→</span>
+                        </div>""", unsafe_allow_html=True)
 
-        # ── Datos embudo España (manual por ahora) ──
-        etapas_esp = [
-            "📥 Leads Entrantes",
-            "📞 Contactado",
-            "🔇 No Contestó",
-            "⭐ Valoración",
-            "💵 Presupuesto",
-            "💳 Financiamiento",
-            "🏥 Valoración Presencial",
-            "📅 Agendado con Depósito",
-            "✅ Venta Cerrada"
-        ]
-        # Tomar leads del df filtrado para España
+        # Datos desde df filtrado
         df_esp_emb = df_filtrado[df_filtrado['Grupo_Pais']=='España'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
+        df_usa_emb = df_filtrado[df_filtrado['Grupo_Pais']=='USA']    if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
+
         leads_esp = int(df_esp_emb['Leads WPP'].sum() + df_esp_emb['Leads IG'].sum()) if not df_esp_emb.empty else 0
-        dep_esp   = int(df_esp_emb['Cierres'].sum()) if not df_esp_emb.empty else 0
-        val_esp   = int(df_esp_emb['Valoraciones'].sum()) if not df_esp_emb.empty else 0
+        val_esp   = int(df_esp_emb['Valoraciones'].sum())       if not df_esp_emb.empty else 0
         pres_esp  = int(df_esp_emb['Venta Dia Siguiente'].sum()) if not df_esp_emb.empty else 0
-        valores_esp = [
-            leads_esp,
-            max(0, int(leads_esp*0.7)),
-            max(0, int(leads_esp*0.3)),
-            val_esp,
-            pres_esp,
-            max(0, int(pres_esp*0.5)),
-            max(0, int(pres_esp*0.4)),
-            dep_esp,
-            max(0, int(dep_esp*0.9))
-        ]
+        dep_esp   = int(df_esp_emb['Cierres'].sum())            if not df_esp_emb.empty else 0
 
-        # ── Datos embudo USA ──
-        etapas_usa = [
-            "📥 Leads Entrantes",
-            "📞 Contactado",
-            "🔇 No Contesta",
-            "💻 Valoración Virtual",
-            "💵 Presupuesto",
-            "🏥 Agendado Presencial",
-            "📅 Agendado con Depósito"
-        ]
-        df_usa_emb = df_filtrado[df_filtrado['Grupo_Pais']=='USA'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
         leads_usa = int(df_usa_emb['Leads WPP'].sum() + df_usa_emb['Leads IG'].sum()) if not df_usa_emb.empty else 0
-        dep_usa   = int(df_usa_emb['Cierres'].sum()) if not df_usa_emb.empty else 0
-        val_usa   = int(df_usa_emb['Valoraciones'].sum()) if not df_usa_emb.empty else 0
+        val_usa   = int(df_usa_emb['Valoraciones'].sum())       if not df_usa_emb.empty else 0
         pres_usa  = int(df_usa_emb['Venta Dia Siguiente'].sum()) if not df_usa_emb.empty else 0
-        valores_usa = [
-            leads_usa,
-            max(0, int(leads_usa*0.7)),
-            max(0, int(leads_usa*0.3)),
-            val_usa,
-            pres_usa,
-            max(0, int(pres_usa*0.5)),
-            dep_usa
+        dep_usa   = int(df_usa_emb['Cierres'].sum())            if not df_usa_emb.empty else 0
+
+        etapas_esp = [
+            ("📥 Leads", leads_esp),
+            ("📞 Contactado", "—"),
+            ("🔇 No Contestó", "—"),
+            ("⭐ Valoración", val_esp),
+            ("💵 Presupuesto", pres_esp),
+            ("💳 Financiamiento", "—"),
+            ("🏥 Val. Presencial", "—"),
+            ("📅 Ag. Depósito", dep_esp),
+            ("✅ Venta Cerrada", "—"),
         ]
 
-        with emb_col1:
-            render_embudo("🇪🇸 Embudo España", etapas_esp, valores_esp, "#00d4aa", "#c9a84c")
-        with emb_col2:
-            render_embudo("🇺🇸 Embudo USA", etapas_usa, valores_usa, "#7c6af7", "#f7a76c")
+        etapas_usa = [
+            ("📥 Leads", leads_usa),
+            ("📞 Contactado", "—"),
+            ("🔇 No Contesta", "—"),
+            ("💻 Val. Virtual", val_usa),
+            ("💵 Presupuesto", pres_usa),
+            ("🏥 Ag. Presencial", "—"),
+            ("📅 Ag. Depósito", dep_usa),
+        ]
+
+        render_embudo_horizontal("🇪🇸 Embudo España", etapas_esp, "#00d4aa", "#ffffff")
+        st.markdown("<br>", unsafe_allow_html=True)
+        render_embudo_horizontal("🇺🇸 Embudo USA", etapas_usa, "#7c6af7", "#ffffff")
 
 # ══ TAB 2 — METAS ═══════════════════════════════════════════════════════════
 with tab2:
