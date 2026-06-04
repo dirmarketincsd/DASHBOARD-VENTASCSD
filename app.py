@@ -411,18 +411,18 @@ with st.sidebar:
 
 # ── APLICAR FILTROS ────────────────────────────────────────────────────────────
 df_filtrado = df_base.copy()
-if not df_filtrado.empty:
+if not df_filtrado.empty and 'Fecha' in df_filtrado.columns:
     if modo_fecha == "Día específico" and fecha_ini is not None:
         df_filtrado = df_filtrado[df_filtrado['Fecha'].dt.date == fecha_ini.date()]
     elif modo_fecha == "Rango de fechas" and fecha_ini is not None:
         df_filtrado = df_filtrado[(df_filtrado['Fecha']>=fecha_ini)&(df_filtrado['Fecha']<=fecha_fin)]
     elif modo_fecha == "Semana" and semana_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado['Semana'].astype(str)==semana_sel]
-    if dia_sel != "Todos":
+    if dia_sel != "Todos" and 'Dia_Semana' in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado['Dia_Semana']==dia_sel]
-    if grupo_sel != "Todos":
+    if grupo_sel != "Todos" and 'Grupo_Pais' in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado['Grupo_Pais']==grupo_sel]
-    if responsable_sel != "Todos":
+    if responsable_sel != "Todos" and 'Responsable' in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado['Responsable']==responsable_sel]
 
 # ── HEADER ─────────────────────────────────────────────────────────────────────
