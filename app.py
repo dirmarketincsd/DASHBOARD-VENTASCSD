@@ -488,7 +488,7 @@ with st.sidebar:
             coms = df_base[df_base['Grupo_Pais']=='España']['Responsable'].unique().tolist()
         else:
             coms = df_base['Responsable'].unique().tolist()
-        vendedores = ["Todos"] + sorted(coms)
+        vendedores = ["Todos"] + sorted([str(c) for c in coms if c and str(c).strip() not in ['','nan','NAN']])
     else:
         vendedores = ["Todos"]
     responsable_sel = st.selectbox("👤 Responsable", vendedores)
