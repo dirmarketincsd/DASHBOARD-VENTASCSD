@@ -520,29 +520,29 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-col_rfijo1, col_rfijo2 = st.columns(2)
+# ── Fila USA (ancho completo, 7 columnas grandes) ──
+st.markdown('<div class="grupo-label-usa">🇺🇸 USA</div>', unsafe_allow_html=True)
+u1,u2,u3,u4,u5,u6,u7 = st.columns(7)
+u1.metric("💬 WPP",         get_val(df_rfijo_usa,'Leads WPP'))
+u2.metric("📸 IG",          get_val(df_rfijo_usa,'Leads IG'))
+u3.metric("📝 Formulario",  get_val(df_rfijo_usa,'Leads Formulario'))
+u4.metric("🌐 Landing",     get_val(df_rfijo_usa,'Leads Landing'))
+u5.metric("🎵 TikTok",      get_val(df_rfijo_usa,'Leads TikTok'))
+u6.metric("⭐ Valoraciones",get_val(df_rfijo_usa,'Valoraciones'))
+u7.metric("💰 Depósitos",   get_val(df_rfijo_usa,'Cierres'))
 
-with col_rfijo1:
-    st.markdown('<div class="grupo-label-usa">🇺🇸 USA</div>', unsafe_allow_html=True)
-    u1,u2,u3,u4,u5,u6,u7 = st.columns(7)
-    u1.metric("💬 WPP",        get_val(df_rfijo_usa,'Leads WPP'))
-    u2.metric("📸 IG",         get_val(df_rfijo_usa,'Leads IG'))
-    u3.metric("📝 Form",       get_val(df_rfijo_usa,'Leads Formulario'))
-    u4.metric("🌐 Landing",    get_val(df_rfijo_usa,'Leads Landing'))
-    u5.metric("🎵 TikTok",     get_val(df_rfijo_usa,'Leads TikTok'))
-    u6.metric("⭐ Valorac.",   get_val(df_rfijo_usa,'Valoraciones'))
-    u7.metric("💰 Depósitos",  get_val(df_rfijo_usa,'Cierres'))
+st.markdown("<br>", unsafe_allow_html=True)
 
-with col_rfijo2:
-    st.markdown('<div class="grupo-label-esp">🇪🇸 España</div>', unsafe_allow_html=True)
-    e1,e2,e3,e4,e5,e6,e7 = st.columns(7)
-    e1.metric("💬 WPP",        get_val(df_rfijo_esp,'Leads WPP'))
-    e2.metric("📸 IG",         get_val(df_rfijo_esp,'Leads IG'))
-    e3.metric("📝 Form",       get_val(df_rfijo_esp,'Leads Formulario'))
-    e4.metric("🌐 Landing",    get_val(df_rfijo_esp,'Leads Landing'))
-    e5.metric("🎵 TikTok",     get_val(df_rfijo_esp,'Leads TikTok'))
-    e6.metric("⭐ Valorac.",   get_val(df_rfijo_esp,'Valoraciones'))
-    e7.metric("💰 Depósitos",  get_val(df_rfijo_esp,'Cierres'))
+# ── Fila España (ancho completo, 7 columnas grandes) ──
+st.markdown('<div class="grupo-label-esp">🇪🇸 España</div>', unsafe_allow_html=True)
+e1,e2,e3,e4,e5,e6,e7 = st.columns(7)
+e1.metric("💬 WPP",         get_val(df_rfijo_esp,'Leads WPP'))
+e2.metric("📸 IG",          get_val(df_rfijo_esp,'Leads IG'))
+e3.metric("📝 Formulario",  get_val(df_rfijo_esp,'Leads Formulario'))
+e4.metric("🌐 Landing",     get_val(df_rfijo_esp,'Leads Landing'))
+e5.metric("🎵 TikTok",      get_val(df_rfijo_esp,'Leads TikTok'))
+e6.metric("⭐ Valoraciones",get_val(df_rfijo_esp,'Valoraciones'))
+e7.metric("💰 Depósitos",   get_val(df_rfijo_esp,'Cierres'))
 
 st.markdown("---")
 
