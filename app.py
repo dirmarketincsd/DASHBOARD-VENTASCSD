@@ -111,8 +111,6 @@ def cargar_ventas_diarias():
                 break
         df = pd.read_csv(url, skiprows=header_idx, header=0)
         df.columns = [str(c).strip().upper().replace('  ',' ') for c in df.columns]
-
-        # Tomar solo primeras 11 columnas y renombrar por posición
         df = df.iloc[:, :11]
         df.columns = ['FECHA','DIA','RESPONSABLE','VALORACIONES','LEADS WPP','LEADS IG',
                       'LEADS FORMULARIO','LEADS LANDING','LEADS TIKTOK','DEPOSITOS','PRESUPUESTADO']
@@ -127,55 +125,34 @@ def cargar_ventas_diarias():
             'VENTA DIA SIGUIENTE(AGENDADOS)':'Venta Dia Siguiente'
         }
         df = df.rename(columns=rename)
-
-        # ── Primero filtrar filas con RESPONSABLE válido ──────────────────────
         if 'Responsable' in df.columns:
+            df = df[df['Responsable'].notna()]
             df['Responsable'] = df['Responsable'].astype(str).str.strip().str.upper()
-            df = df[~df['Responsable'].isin(['','NAN','N/A','RESPONSABLE','TOTAL','TOTALES','NONE'])]
-
-        # ── Forward-fill FECHA y DIA para filas sin fecha (mismo día, otro asesor) ──
-        if 'Fecha' in df.columns:
-            # Reemplazar vacíos/nan en Fecha con NaT para poder ffill
-            df['Fecha'] = df['Fecha'].astype(str).str.strip()
-            df['Fecha'] = df['Fecha'].replace({'nan':'','NAN':'','None':'','-':'','N/A':''})
-            df['Fecha'] = pd.to_datetime(df['Fecha'], dayfirst=True, errors='coerce')
-            # Forward fill: si DANIELA/EVELYN están en la fila siguiente sin fecha, toman la de arriba
-            df['Fecha'] = df['Fecha'].ffill()
-            df = df[df['Fecha'].notna()]
-
-        if 'Dia_Texto' in df.columns:
-            df['Dia_Texto'] = df['Dia_Texto'].astype(str).str.strip()
-            df['Dia_Texto'] = df['Dia_Texto'].replace({'nan':'','NAN':'','None':''})
-            df['Dia_Texto'] = df['Dia_Texto'].ffill()
-
-        # ── Asignar grupo por país ────────────────────────────────────────────
-        if 'Responsable' in df.columns:
+            df = df[~df['Responsable'].isin(['','NAN','N/A','RESPONSABLE','TOTAL','TOTALES'])]
             def asignar_grupo(r):
                 resp = str(r.get('Responsable','')).upper()
-                sede = str(r.get('Sede','')).upper() if 'Sede' in r else ''
+                sede = str(r.get('Sede','')).upper()
                 if resp in EQUIPOS_BASE: return EQUIPOS_BASE[resp]
                 if any(x in sede for x in ['MADRID','BARCELONA','VALENCIA','ALICANTE','MALAGA','BILBAO','ESPAÑA']): return 'España'
                 if any(x in sede for x in ['DALLAS','HOUSTON','ORLANDO','JERSEY','ANGELES','MIAMI','USA']): return 'USA'
                 return 'Por Clasificar'
             df['Grupo_Pais'] = df.apply(asignar_grupo, axis=1)
-
+        if 'Fecha' in df.columns:
+            df['Fecha'] = pd.to_datetime(df['Fecha'], dayfirst=True, errors='coerce')
+            df['Fecha'] = df['Fecha'].ffill()  # ← hereda fecha a filas sin fecha (Daniela/Evelyn)
+            df = df[df['Fecha'].notna()]
+        if 'Dia_Texto' in df.columns:
+            df['Dia_Texto'] = df['Dia_Texto'].ffill()  # ← hereda día también
         DIAS_NORM = {'LUNES':'Lunes','MARTES':'Martes','MIERCOLES':'Miércoles',
                      'MIÉRCOLES':'Miércoles','JUEVES':'Jueves','VIERNES':'Viernes',
                      'SABADO':'Sábado','SÁBADO':'Sábado','DOMINGO':'Domingo'}
         if 'Dia_Texto' in df.columns:
-            df['Dia_Semana'] = df['Dia_Texto'].astype(str).str.strip().str.upper().map(DIAS_NORM)
-            # Si no mapeó, derivar de la fecha
-            mask_sin_dia = df['Dia_Semana'].isna()
-            if mask_sin_dia.any():
-                nombres = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo']
-                df.loc[mask_sin_dia, 'Dia_Semana'] = df.loc[mask_sin_dia, 'Fecha'].dt.dayofweek.map(lambda x: nombres[x])
-            df['Dia_Semana'] = df['Dia_Semana'].fillna('Sin dato')
+            df['Dia_Semana'] = df['Dia_Texto'].astype(str).str.strip().str.upper().map(DIAS_NORM).fillna('Sin dato')
         elif 'Fecha' in df.columns:
             nombres = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo']
             df['Dia_Semana'] = df['Fecha'].dt.dayofweek.map(lambda x: nombres[x])
         else:
             df['Dia_Semana'] = 'Sin dato'
-
         if 'Semana' not in df.columns: df['Semana'] = '1'
         df['Semana'] = df['Semana'].astype(str).str.strip()
         for col in ['Valoraciones','Leads WPP','Leads IG','Leads Formulario','Leads Landing','Leads TikTok','Cierres','Venta Dia Siguiente']:
@@ -488,7 +465,7 @@ with st.sidebar:
             coms = df_base[df_base['Grupo_Pais']=='España']['Responsable'].unique().tolist()
         else:
             coms = df_base['Responsable'].unique().tolist()
-        vendedores = ["Todos"] + sorted([str(c) for c in coms if c and str(c).strip() not in ['','nan','NAN']])
+        vendedores = ["Todos"] + sorted(coms)
     else:
         vendedores = ["Todos"]
     responsable_sel = st.selectbox("👤 Responsable", vendedores)
