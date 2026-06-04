@@ -63,25 +63,21 @@ def cargar_ventas_diarias():
     try:
         url = sheet_url("Ventas diarias")
         raw = pd.read_csv(url, header=None)
-        # Buscar fila que tenga FECHA y RESPONSABLE (encabezados reales)
-        header_idx = 3  # default fila 4 (índice 3)
+        # Buscar fila que tenga FECHA y RESPONSABLE
+        header_idx = 3
         for i in range(min(10, len(raw))):
-            vals = raw.iloc[i].map(str).str.upper().str.strip().values
-            if 'FECHA' in vals and any('RESPONSABLE' in v for v in vals):
+            vals = [str(v).strip().upper() for v in raw.iloc[i].tolist()]
+            if 'FECHA' in vals and 'RESPONSABLE' in vals:
                 header_idx = i
                 break
-        df = pd.read_csv(url, skiprows=header_idx)
+        # Leer con los encabezados correctos
+        df = pd.read_csv(url, skiprows=header_idx, header=0)
+        # Limpiar nombres de columnas
         df.columns = [str(c).strip().upper().replace('  ',' ') for c in df.columns]
-        # Solo tomar columnas A-K (datos de ventas diarias, ignorar columnas de ventas cerradas)
-        cols_principales = ['FECHA','DIA','RESPONSABLE','VALORACIONES','LEADS WPP','LEADS IG',
-                           'LEADS FORMULARIO','LEADS LANDING','LEADS TIKTOK','DEPOSITOS','PRESUPUESTADO']
-        # Filtrar solo columnas que existen
-        cols_ok = [c for c in cols_principales if c in df.columns]
-        if cols_ok:
-            df = df[cols_ok]
-        else:
-            # Si no encuentra las columnas, mostrar qué columnas hay
-            st.warning(f"⚠️ Columnas encontradas: {list(df.columns[:15])}")
+        # Tomar solo las primeras 11 columnas (A a K = datos diarios)
+        df = df.iloc[:, :11]
+        df.columns = ['FECHA','DIA','RESPONSABLE','VALORACIONES','LEADS WPP','LEADS IG',
+                      'LEADS FORMULARIO','LEADS LANDING','LEADS TIKTOK','DEPOSITOS','PRESUPUESTADO']
         rename = {
             'FECHA':'Fecha',
             'DIA':'Dia_Texto',
