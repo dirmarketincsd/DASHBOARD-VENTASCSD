@@ -238,6 +238,129 @@ def cargar_global():
     df_usa['País'] = '🇺🇸 USA'
     return pd.concat([df_esp, df_usa], ignore_index=True)
 
+# ── CARGA TAREAS KOMMO ────────────────────────────────────────────────────────
+@st.cache_data(ttl=60)
+def cargar_tareas():
+    try:
+        url = sheet_url("TAREAS KOMMO")
+        raw = pd.read_csv(url, header=None)
+        # Buscar fila de encabezados
+        header_idx = 0
+        for i in range(min(10, len(raw))):
+            vals = raw.iloc[i].map(str).str.upper().str.strip().values
+            if any('RESPONSABLE' in v or 'TIPO' in v for v in vals):
+                header_idx = i
+                break
+        df = pd.read_csv(url, skiprows=header_idx)
+        df.columns = [str(c).strip().upper() for c in df.columns]
+        rename = {'RESPONSABLE':'Responsable','TIPO':'Tipo','CANTIDAD':'Cantidad','FECHA':'Fecha'}
+        df = df.rename(columns=rename)
+        if 'Responsable' in df.columns:
+            df = df[df['Responsable'].notna()]
+            df['Responsable'] = df['Responsable'].astype(str).str.strip().str.upper()
+            df = df[~df['Responsable'].isin(['','NAN','RESPONSABLE','TOTAL'])]
+        if 'Cantidad' in df.columns:
+            df['Cantidad'] = pd.to_numeric(df['Cantidad'].astype(str).str.replace('[^0-9]','',regex=True), errors='coerce').fillna(0).astype(int)
+        return df
+    except Exception as e:
+        return pd.DataFrame()
+
+# ── CARGA VENTAS CERRADAS (desde Ventas diarias cols M+) ──────────────────────
+@st.cache_data(ttl=60)
+def cargar_ventas_cerradas():
+    try:
+        url = sheet_url("Ventas diarias")
+        raw = pd.read_csv(url, header=None)
+        # Buscar columnas VENTA CERRADA - USA y VENTA CERRADA - ESPAÑA
+        data_usa = []
+        data_esp = []
+        header_row = None
+        usa_col = None
+        esp_col = None
+
+        for i in range(min(10, len(raw))):
+            for j in range(len(raw.columns)):
+                val = str(raw.iloc[i,j]).strip().upper()
+                if 'VENTA CERRADA' in val and 'USA' in val:
+                    usa_col = j
+                    header_row = i + 1
+                if 'VENTA CERRADA' in val and 'ESPA' in val:
+                    esp_col = j
+
+        if header_row is None:
+            return pd.DataFrame(), pd.DataFrame()
+
+        headers = raw.iloc[header_row].tolist()
+
+        # Extraer datos USA
+        if usa_col is not None:
+            for i in range(header_row+1, len(raw)):
+                row = raw.iloc[i]
+                resp = str(row.iloc[usa_col]).strip()
+                tipo = str(row.iloc[usa_col+1]).strip() if usa_col+1 < len(row) else ''
+                vend = str(row.iloc[usa_col+2]).strip() if usa_col+2 < len(row) else ''
+                sede = str(row.iloc[usa_col+3]).strip() if usa_col+3 < len(row) else ''
+                total = str(row.iloc[usa_col+4]).strip() if usa_col+4 < len(row) else ''
+                if resp and resp not in ['nan','','RESPONSABLE']:
+                    try: total = float(total)
+                    except: total = 0
+                    data_usa.append({'Responsable':resp,'Tipo de Diseño':tipo,'Vendido En':vend,'Sede':sede,'Total':total})
+
+        # Extraer datos España
+        if esp_col is not None:
+            for i in range(header_row+1, len(raw)):
+                row = raw.iloc[i]
+                resp = str(row.iloc[esp_col]).strip()
+                tipo = str(row.iloc[esp_col+1]).strip() if esp_col+1 < len(row) else ''
+                vend = str(row.iloc[esp_col+2]).strip() if esp_col+2 < len(row) else ''
+                sede = str(row.iloc[esp_col+3]).strip() if esp_col+3 < len(row) else ''
+                total = str(row.iloc[esp_col+4]).strip() if esp_col+4 < len(row) else ''
+                if resp and resp not in ['nan','','RESPONSABLE']:
+                    try: total = float(total)
+                    except: total = 0
+                    data_esp.append({'Responsable':resp,'Tipo de Diseño':tipo,'Vendido En':vend,'Sede':sede,'Total':total})
+
+        return pd.DataFrame(data_usa), pd.DataFrame(data_esp)
+    except Exception as e:
+        return pd.DataFrame(), pd.DataFrame()
+
+# ── CARGA AGENDA PENDIENTE ─────────────────────────────────────────────────────
+@st.cache_data(ttl=60)
+def cargar_agenda_pendiente():
+    try:
+        url = sheet_url("Ventas diarias")
+        raw = pd.read_csv(url, header=None)
+        data_usa = []
+        data_esp = []
+
+        for i in range(min(50, len(raw))):
+            for j in range(len(raw.columns)):
+                val = str(raw.iloc[i,j]).strip().upper()
+                if 'AGENDA PENDIENTE' in val and 'USA' in val:
+                    header_row = i + 1
+                    for k in range(header_row+1, len(raw)):
+                        row = raw.iloc[k]
+                        resp = str(row.iloc[j]).strip()
+                        dep  = str(row.iloc[j+1]).strip() if j+1 < len(row) else ''
+                        fecha = str(row.iloc[j+2]).strip() if j+2 < len(row) else ''
+                        tipo = str(row.iloc[j+3]).strip() if j+3 < len(row) else ''
+                        if resp and resp not in ['nan','','RESPONSABLE']:
+                            data_usa.append({'Responsable':resp,'Depósito':dep,'Fecha Pendiente':fecha,'Tipo de Diseño':tipo})
+                if 'AGENDA PENDIENTE' in val and 'ESPA' in val:
+                    header_row = i + 1
+                    for k in range(header_row+1, len(raw)):
+                        row = raw.iloc[k]
+                        resp = str(row.iloc[j]).strip()
+                        dep  = str(row.iloc[j+1]).strip() if j+1 < len(row) else ''
+                        fecha = str(row.iloc[j+2]).strip() if j+2 < len(row) else ''
+                        tipo = str(row.iloc[j+3]).strip() if j+3 < len(row) else ''
+                        if resp and resp not in ['nan','','RESPONSABLE']:
+                            data_esp.append({'Responsable':resp,'Depósito':dep,'Fecha Pendiente':fecha,'Tipo de Diseño':tipo})
+
+        return pd.DataFrame(data_usa), pd.DataFrame(data_esp)
+    except:
+        return pd.DataFrame(), pd.DataFrame()
+
 # Cargar datos
 df_base = cargar_ventas_diarias()
 
@@ -357,16 +480,37 @@ with tab1:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        cols_vis = ['Fecha','Semana','Dia_Semana','Responsable','Grupo_Pais','Sede',
+        # ── Tabla ordenada por fecha (acumulativa) ──
+        cols_vis = ['Fecha','Dia_Semana','Semana','Responsable','Grupo_Pais',
                     'Leads WPP','Leads IG','Valoraciones','Venta Dia Siguiente','Cierres']
         cols_ok = [c for c in cols_vis if c in df_filtrado.columns]
         df_show = df_filtrado[cols_ok].copy()
+
+        # Ordenar por fecha ascendente
         if 'Fecha' in df_show.columns:
+            df_show = df_show.sort_values('Fecha', ascending=True)
             df_show['Fecha'] = df_show['Fecha'].dt.strftime('%d/%m/%Y')
-        if 'Venta Dia Siguiente' in df_show.columns:
-            df_show = df_show.rename(columns={'Venta Dia Siguiente':'Presupuestado','Cierres':'Depósitos'})
-        st.markdown("#### 📋 Registros")
-        st.dataframe(df_show, use_container_width=True, hide_index=True)
+
+        df_show = df_show.rename(columns={
+            'Venta Dia Siguiente':'Presupuestado',
+            'Cierres':'Depósitos',
+            'Dia_Semana':'Día',
+            'Grupo_Pais':'Grupo'
+        })
+
+        # Fila de totales
+        cols_num = ['Leads WPP','Leads IG','Valoraciones','Presupuestado','Depósitos']
+        totales = {c: df_show[c].sum() if c in df_show.columns else '' for c in df_show.columns}
+        totales['Fecha'] = '📊 TOTAL'
+        totales['Día'] = ''
+        totales['Semana'] = ''
+        totales['Responsable'] = ''
+        totales['Grupo'] = ''
+        df_totales = pd.DataFrame([totales])
+        df_final = pd.concat([df_show, df_totales], ignore_index=True)
+
+        st.markdown("#### 📋 Registros por Fecha")
+        st.dataframe(df_final, use_container_width=True, hide_index=True)
         csv = df_filtrado.to_csv(index=False).encode('utf-8')
         st.download_button("⬇️ Descargar CSV", data=csv, file_name=f"ventas_{date.today()}.csv", mime="text/csv")
         st.markdown("---")
@@ -437,6 +581,102 @@ with tab1:
         render_embudo_horizontal("🇪🇸 Embudo España", etapas_esp, "#00d4aa")
         st.markdown("<br>", unsafe_allow_html=True)
         render_embudo_horizontal("🇺🇸 Embudo USA", etapas_usa, "#7c6af7")
+
+        st.markdown("---")
+
+        # ══ TAREAS PARA HOY ═══════════════════════════════════════════════
+        st.markdown("### 📋 Tareas para Hoy")
+        df_tareas = cargar_tareas()
+        if not df_tareas.empty:
+            t_col1, t_col2 = st.columns(2)
+            TIPOS = ['Valoración Virtual', 'Seguimiento']
+            ASESORES = ['DANIELA', 'EVELYN', 'CAROLINA']
+
+            for asesor in ASESORES:
+                df_a = df_tareas[df_tareas['Responsable'].str.upper() == asesor] if 'Responsable' in df_tareas.columns else pd.DataFrame()
+                grupo = EQUIPOS_BASE.get(asesor, 'Por Clasificar')
+                color = "#00d4aa" if grupo == 'España' else "#7c6af7"
+
+                with (t_col1 if grupo == 'España' else t_col2):
+                    st.markdown(f"""
+                    <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color};
+                                border-radius:12px;padding:14px 18px;margin-bottom:10px">
+                        <div style="color:{color};font-weight:800;font-size:0.95rem;margin-bottom:10px">👤 {asesor}</div>""",
+                        unsafe_allow_html=True)
+                    tc1, tc2 = st.columns(2)
+                    for tipo in TIPOS:
+                        df_t = df_a[df_a['Tipo'].astype(str).str.strip().str.upper() == tipo.upper()] if not df_a.empty and 'Tipo' in df_a.columns else pd.DataFrame()
+                        cant = int(df_t['Cantidad'].sum()) if not df_t.empty and 'Cantidad' in df_t.columns else 0
+                        emoji = "💻" if "VIRTUAL" in tipo.upper() else "📞"
+                        col_use = tc1 if tipo == 'Valoración Virtual' else tc2
+                        col_use.metric(f"{emoji} {tipo}", cant)
+                    st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.info("📝 Sin tareas registradas. Agrega datos en la hoja 'TAREAS KOMMO'.")
+
+        # ── Ranking de Valoraciones ──────────────────────────────────────
+        st.markdown("#### 🏆 Ranking de Valoraciones")
+        if not df_base.empty and 'Responsable' in df_base.columns and 'Valoraciones' in df_base.columns:
+            df_rank_val = df_base.groupby('Responsable')['Valoraciones'].sum().reset_index()
+            df_rank_val = df_rank_val[df_rank_val['Valoraciones'] > 0].sort_values('Valoraciones', ascending=False)
+            total_val = df_rank_val['Valoraciones'].sum()
+            if total_val > 0:
+                df_rank_val['%'] = (df_rank_val['Valoraciones'] / total_val * 100).round(1)
+                df_rank_val['Grupo'] = df_rank_val['Responsable'].map(lambda x: EQUIPOS_BASE.get(x,'Por Clasificar'))
+                for _, row in df_rank_val.iterrows():
+                    color = "#00d4aa" if row['Grupo'] == 'España' else "#7c6af7"
+                    p = row['%']
+                    st.markdown(f"""
+                    <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #2a2000;
+                                border-radius:10px;padding:10px 16px;margin-bottom:6px">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                            <span style="color:white;font-weight:700">👤 {row['Responsable']}</span>
+                            <span style="color:{color};font-weight:700">{int(row['Valoraciones'])} val. · {p}%</span>
+                        </div>
+                        <div style="background:#1e2340;border-radius:6px;height:10px">
+                            <div style="height:10px;border-radius:6px;background:{color};width:{p}%"></div>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # ══ VENTAS CERRADAS ═══════════════════════════════════════════════
+        st.markdown("### ✅ Ventas Cerradas")
+        df_vc_usa, df_vc_esp = cargar_ventas_cerradas()
+        vc1, vc2 = st.columns(2)
+        with vc1:
+            st.markdown("<div style='color:#7c6af7;font-weight:800;font-size:0.9rem;margin-bottom:8px'>🇺🇸 USA</div>", unsafe_allow_html=True)
+            if not df_vc_usa.empty:
+                st.dataframe(df_vc_usa, use_container_width=True, hide_index=True)
+                st.metric("💰 Total USA", f"${df_vc_usa['Total'].sum():,.0f}")
+            else:
+                st.info("Sin ventas cerradas USA.")
+        with vc2:
+            st.markdown("<div style='color:#00d4aa;font-weight:800;font-size:0.9rem;margin-bottom:8px'>🇪🇸 España</div>", unsafe_allow_html=True)
+            if not df_vc_esp.empty:
+                st.dataframe(df_vc_esp, use_container_width=True, hide_index=True)
+                st.metric("💰 Total España", f"${df_vc_esp['Total'].sum():,.0f}")
+            else:
+                st.info("Sin ventas cerradas España.")
+
+        st.markdown("---")
+
+        # ══ AGENDA PENDIENTE ══════════════════════════════════════════════
+        st.markdown("### 📅 Agenda Pendiente")
+        df_ag_usa, df_ag_esp = cargar_agenda_pendiente()
+        ag1, ag2 = st.columns(2)
+        with ag1:
+            st.markdown("<div style='color:#7c6af7;font-weight:800;font-size:0.9rem;margin-bottom:8px'>🇺🇸 USA</div>", unsafe_allow_html=True)
+            if not df_ag_usa.empty:
+                st.dataframe(df_ag_usa, use_container_width=True, hide_index=True)
+            else:
+                st.info("Sin agenda pendiente USA.")
+        with ag2:
+            st.markdown("<div style='color:#00d4aa;font-weight:800;font-size:0.9rem;margin-bottom:8px'>🇪🇸 España</div>", unsafe_allow_html=True)
+            if not df_ag_esp.empty:
+                st.dataframe(df_ag_esp, use_container_width=True, hide_index=True)
+            else:
+                st.info("Sin agenda pendiente España.")
 
 # ══ TAB 2 — METAS ═══════════════════════════════════════════════════════════
 with tab2:
