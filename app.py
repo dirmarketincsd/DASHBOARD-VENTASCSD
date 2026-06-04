@@ -400,7 +400,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🔍 Filtros")
 
-    modo_fecha = st.radio("📅 Filtrar por", ["Día específico","Rango de fechas","Semana","Todos"])
+    modo_fecha = st.radio("📅 Filtrar por", ["Todos","Día específico","Rango de fechas","Semana"])
     fecha_ini = fecha_fin = None
     semana_sel = "Todas"
 
