@@ -374,24 +374,29 @@ with tab1:
         st.markdown("---")
         st.markdown("### 🔻 Embudos de Ventas")
 
-        def render_embudo_horizontal(titulo, etapas_vals, color_borde, color_etapa):
-            st.markdown(f'<div style="color:{color_borde};font-size:0.8rem;font-weight:800;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px">{titulo}</div>', unsafe_allow_html=True)
-            n = len(etapas_vals)
-            cols = st.columns(n * 2 - 1)
+        def render_embudo_horizontal(titulo, etapas_vals, color_borde):
+            st.markdown(f'<div style="color:{color_borde};font-size:0.8rem;font-weight:800;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">{titulo}</div>', unsafe_allow_html=True)
+            # Construir HTML de todo el embudo en una sola fila scrolleable
+            items_html = ""
             for i, (etapa, val) in enumerate(etapas_vals):
-                with cols[i * 2]:
-                    st.markdown(f"""
-                    <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color_borde};
-                                border-radius:12px;padding:12px 8px;text-align:center;min-height:80px">
-                        <div style="color:#8b9bb4;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">{etapa}</div>
-                        <div style="color:{color_etapa};font-size:1.6rem;font-weight:800;line-height:1">{val}</div>
-                    </div>""", unsafe_allow_html=True)
-                if i < n - 1:
-                    with cols[i * 2 + 1]:
-                        st.markdown(f"""
-                        <div style="display:flex;align-items:center;justify-content:center;height:80px;margin-top:0px">
-                            <span style="color:{color_borde};font-size:1.4rem">→</span>
-                        </div>""", unsafe_allow_html=True)
+                color_val = color_borde if str(val) != "—" and str(val) != "0" else "#555566"
+                items_html += f"""
+                <div style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+                            background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color_borde};
+                            border-radius:14px;padding:22px 20px;min-width:150px;min-height:110px;
+                            text-align:center;vertical-align:top;
+                            box-shadow:0 4px 15px rgba(0,0,0,0.3)">
+                    <div style="color:#8b9bb4;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.8px;
+                                margin-bottom:12px;white-space:nowrap">{etapa}</div>
+                    <div style="color:{color_val};font-size:2.4rem;font-weight:800;line-height:1">{val}</div>
+                </div>"""
+                if i < len(etapas_vals) - 1:
+                    items_html += f"""
+                <div style="display:inline-flex;align-items:center;justify-content:center;
+                            padding:0 6px;vertical-align:top;margin-top:30px">
+                    <span style="color:{color_borde};font-size:1.5rem;font-weight:300">→</span>
+                </div>"""
+            st.markdown(f'<div style="overflow-x:auto;white-space:nowrap;padding-bottom:8px">{items_html}</div>', unsafe_allow_html=True)
 
         # Datos desde df filtrado
         df_esp_emb = df_filtrado[df_filtrado['Grupo_Pais']=='España'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
@@ -429,9 +434,9 @@ with tab1:
             ("📅 Ag. Depósito", dep_usa),
         ]
 
-        render_embudo_horizontal("🇪🇸 Embudo España", etapas_esp, "#00d4aa", "#ffffff")
+        render_embudo_horizontal("🇪🇸 Embudo España", etapas_esp, "#00d4aa")
         st.markdown("<br>", unsafe_allow_html=True)
-        render_embudo_horizontal("🇺🇸 Embudo USA", etapas_usa, "#7c6af7", "#ffffff")
+        render_embudo_horizontal("🇺🇸 Embudo USA", etapas_usa, "#7c6af7")
 
 # ══ TAB 2 — METAS ═══════════════════════════════════════════════════════════
 with tab2:
