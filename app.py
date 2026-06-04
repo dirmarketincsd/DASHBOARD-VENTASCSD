@@ -333,45 +333,27 @@ with tab1:
     if df_filtrado.empty:
         st.warning("⚠️ Sin registros para estos filtros.")
     else:
-        # ── KPIs Globales ──
-        k1,k2,k3,k4,k5 = st.columns(5)
-        k1.metric("💬 Leads WPP",     int(df_filtrado['Leads WPP'].sum()))
-        k2.metric("📸 Leads IG",      int(df_filtrado['Leads IG'].sum()))
-        k3.metric("⭐ Valoraciones",   int(df_filtrado['Valoraciones'].sum()))
-        k4.metric("📅 Presupuestado", int(df_filtrado['Venta Dia Siguiente'].sum()))
-        k5.metric("💰 Depósitos",       int(df_filtrado['Cierres'].sum()))
+        # ── KPIs Grupo USA ──
+        df_usa_f = df_filtrado[df_filtrado['Grupo_Pais']=='USA'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
+        st.markdown('<div style="color:#7c6af7;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">🇺🇸 Grupo USA</div>', unsafe_allow_html=True)
+        u1,u2,u3,u4,u5 = st.columns(5)
+        u1.metric("💬 Leads WPP",     int(df_usa_f['Leads WPP'].sum()) if not df_usa_f.empty else 0)
+        u2.metric("📸 Leads IG",      int(df_usa_f['Leads IG'].sum()) if not df_usa_f.empty else 0)
+        u3.metric("⭐ Valoraciones",   int(df_usa_f['Valoraciones'].sum()) if not df_usa_f.empty else 0)
+        u4.metric("📅 Presupuestado", int(df_usa_f['Venta Dia Siguiente'].sum()) if not df_usa_f.empty else 0)
+        u5.metric("💰 Depósitos",     int(df_usa_f['Cierres'].sum()) if not df_usa_f.empty else 0)
 
-        # ── KPIs por Grupo ──
-        if 'Grupo_Pais' in df_filtrado.columns:
-            df_esp_f = df_filtrado[df_filtrado['Grupo_Pais']=='España']
-            df_usa_f = df_filtrado[df_filtrado['Grupo_Pais']=='USA']
+        st.markdown("<br>", unsafe_allow_html=True)
 
-            col_esp, col_usa = st.columns(2)
-            with col_esp:
-                st.markdown("""<div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #00d4aa;
-                    border-radius:12px;padding:12px 16px;margin-top:10px">
-                    <div style="color:#00d4aa;font-weight:800;font-size:0.95rem;margin-bottom:10px">🇪🇸 ESPAÑA</div>""",
-                    unsafe_allow_html=True)
-                e1,e2,e3,e4,e5 = st.columns(5)
-                e1.metric("💬 WPP",   int(df_esp_f['Leads WPP'].sum()))
-                e2.metric("📸 IG",    int(df_esp_f['Leads IG'].sum()))
-                e3.metric("⭐ Val.",   int(df_esp_f['Valoraciones'].sum()))
-                e4.metric("📅 Pres.", int(df_esp_f['Venta Dia Siguiente'].sum()))
-                e5.metric("💰 Dep.",  int(df_esp_f['Cierres'].sum()))
-                st.markdown("</div>", unsafe_allow_html=True)
-
-            with col_usa:
-                st.markdown("""<div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #7c6af7;
-                    border-radius:12px;padding:12px 16px;margin-top:10px">
-                    <div style="color:#7c6af7;font-weight:800;font-size:0.95rem;margin-bottom:10px">🇺🇸 USA</div>""",
-                    unsafe_allow_html=True)
-                u1,u2,u3,u4,u5 = st.columns(5)
-                u1.metric("💬 WPP",   int(df_usa_f['Leads WPP'].sum()))
-                u2.metric("📸 IG",    int(df_usa_f['Leads IG'].sum()))
-                u3.metric("⭐ Val.",   int(df_usa_f['Valoraciones'].sum()))
-                u4.metric("📅 Pres.", int(df_usa_f['Venta Dia Siguiente'].sum()))
-                u5.metric("💰 Dep.",  int(df_usa_f['Cierres'].sum()))
-                st.markdown("</div>", unsafe_allow_html=True)
+        # ── KPIs Grupo España ──
+        df_esp_f = df_filtrado[df_filtrado['Grupo_Pais']=='España'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
+        st.markdown('<div style="color:#00d4aa;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">🇪🇸 Grupo España</div>', unsafe_allow_html=True)
+        e1,e2,e3,e4,e5 = st.columns(5)
+        e1.metric("💬 Leads WPP",     int(df_esp_f['Leads WPP'].sum()) if not df_esp_f.empty else 0)
+        e2.metric("📸 Leads IG",      int(df_esp_f['Leads IG'].sum()) if not df_esp_f.empty else 0)
+        e3.metric("⭐ Valoraciones",   int(df_esp_f['Valoraciones'].sum()) if not df_esp_f.empty else 0)
+        e4.metric("📅 Presupuestado", int(df_esp_f['Venta Dia Siguiente'].sum()) if not df_esp_f.empty else 0)
+        e5.metric("💰 Depósitos",     int(df_esp_f['Cierres'].sum()) if not df_esp_f.empty else 0)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
