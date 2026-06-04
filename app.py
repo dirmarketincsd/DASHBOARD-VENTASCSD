@@ -279,24 +279,59 @@ def cargar_tareas():
     try:
         url = sheet_url("TAREAS KOMMO")
         raw = pd.read_csv(url, header=None)
+
+        # La hoja tiene estructura: RESPONSABLE | TIPO | CANTIDAD | FECHA
+        # con filas vacías intercaladas y header en fila 0 o 1
+        # Buscar fila de encabezado real
         header_idx = 0
-        for i in range(min(10, len(raw))):
-            vals = raw.iloc[i].map(str).str.upper().str.strip().values
-            if any('RESPONSABLE' in v or 'TIPO' in v for v in vals):
+        for i in range(min(5, len(raw))):
+            vals = [str(v).strip().upper() for v in raw.iloc[i].tolist()]
+            if 'RESPONSABLE' in vals and 'TIPO' in vals:
                 header_idx = i
                 break
-        df = pd.read_csv(url, skiprows=header_idx)
-        df.columns = [str(c).strip().upper() for c in df.columns]
-        rename = {'RESPONSABLE':'Responsable','TIPO':'Tipo','CANTIDAD':'Cantidad','FECHA':'Fecha'}
-        df = df.rename(columns=rename)
-        if 'Responsable' in df.columns:
-            df = df[df['Responsable'].notna()]
-            df['Responsable'] = df['Responsable'].astype(str).str.strip().str.upper()
-            df = df[~df['Responsable'].isin(['','NAN','RESPONSABLE','TOTAL'])]
-        if 'Cantidad' in df.columns:
-            df['Cantidad'] = pd.to_numeric(df['Cantidad'].astype(str).str.replace('[^0-9]','',regex=True), errors='coerce').fillna(0).astype(int)
+
+        rows = []
+        current_resp = None
+        SKIP = {'', 'NAN', 'NONE', 'RESPONSABLE', 'TOTAL', 'TOTALES'}
+
+        for i in range(header_idx + 1, len(raw)):
+            row = raw.iloc[i]
+            col_a = str(row.iloc[0]).strip().upper() if len(row) > 0 else ''
+            col_b = str(row.iloc[1]).strip().upper() if len(row) > 1 else ''
+            col_c = str(row.iloc[2]).strip()          if len(row) > 2 else ''
+            col_d = str(row.iloc[3]).strip()          if len(row) > 3 else ''
+
+            # Si col_a tiene nombre de asesor (sin tipo), actualizar responsable actual
+            if col_a and col_a not in SKIP and col_b in ('', 'NAN', 'TIPO'):
+                current_resp = col_a
+                continue
+
+            # Si col_a tiene responsable Y col_b tiene tipo → fila de dato
+            if col_a and col_a not in SKIP and col_b and col_b not in ('', 'NAN', 'TIPO'):
+                current_resp = col_a
+                tipo    = col_b
+                try:    cantidad = int(float(col_c)) if col_c not in ('', 'NAN') else 0
+                except: cantidad = 0
+                fecha = col_d if col_d not in ('', 'NAN') else ''
+                rows.append({'Responsable': current_resp, 'Tipo': tipo, 'Cantidad': cantidad, 'Fecha': fecha})
+                continue
+
+            # Si col_a vacío pero col_b tiene tipo → usa responsable anterior
+            if (not col_a or col_a in SKIP) and col_b and col_b not in ('', 'NAN', 'TIPO') and current_resp:
+                tipo    = col_b
+                try:    cantidad = int(float(col_c)) if col_c not in ('', 'NAN') else 0
+                except: cantidad = 0
+                fecha = col_d if col_d not in ('', 'NAN') else ''
+                rows.append({'Responsable': current_resp, 'Tipo': tipo, 'Cantidad': cantidad, 'Fecha': fecha})
+
+        df = pd.DataFrame(rows)
+        if df.empty:
+            return pd.DataFrame()
+
+        df = df[df['Cantidad'] > 0]  # solo tareas con cantidad > 0
         return df
     except Exception as e:
+        st.error(f"Error tareas: {e}")
         return pd.DataFrame()
 
 # ── CARGA VENTAS CERRADAS ──────────────────────────────────────────────────────
@@ -647,26 +682,40 @@ with tab1:
         st.markdown("### 📋 Tareas para Hoy")
         df_tareas = cargar_tareas()
         if not df_tareas.empty:
-            t_col1, t_col2 = st.columns(2)
-            TIPOS    = ['Valoración Virtual', 'Seguimiento']
             ASESORES = ['DANIELA', 'EVELYN', 'CAROLINA']
-            for asesor in ASESORES:
-                df_a  = df_tareas[df_tareas['Responsable'].str.upper() == asesor] if 'Responsable' in df_tareas.columns else pd.DataFrame()
+            t_col1, t_col2 = st.columns(2)
+
+            for idx, asesor in enumerate(ASESORES):
+                df_a  = df_tareas[df_tareas['Responsable'] == asesor] if 'Responsable' in df_tareas.columns else pd.DataFrame()
                 grupo = EQUIPOS_BASE.get(asesor, 'Por Clasificar')
                 color = "#00d4aa" if grupo == 'España' else "#7c6af7"
-                with (t_col1 if grupo == 'España' else t_col2):
+                col_use = t_col1 if idx % 2 == 0 else t_col2
+
+                with col_use:
                     st.markdown(f"""
                     <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color};
-                                border-radius:12px;padding:14px 18px;margin-bottom:10px">
-                        <div style="color:{color};font-weight:800;font-size:0.95rem;margin-bottom:10px">👤 {asesor}</div>""",
-                        unsafe_allow_html=True)
-                    tc1, tc2 = st.columns(2)
-                    for tipo in TIPOS:
-                        df_t = df_a[df_a['Tipo'].astype(str).str.strip().str.upper() == tipo.upper()] if not df_a.empty and 'Tipo' in df_a.columns else pd.DataFrame()
-                        cant = int(df_t['Cantidad'].sum()) if not df_t.empty and 'Cantidad' in df_t.columns else 0
-                        emoji = "💻" if "VIRTUAL" in tipo.upper() else "📞"
-                        col_use = tc1 if tipo == 'Valoración Virtual' else tc2
-                        col_use.metric(f"{emoji} {tipo}", cant)
+                                border-radius:12px;padding:14px 18px;margin-bottom:14px">
+                        <div style="color:{color};font-weight:800;font-size:0.95rem;margin-bottom:12px">👤 {asesor}</div>
+                    """, unsafe_allow_html=True)
+
+                    if not df_a.empty and 'Tipo' in df_a.columns:
+                        # Mostrar todos los tipos con cantidad > 0
+                        tipos_unicos = df_a['Tipo'].unique().tolist()
+                        # Dividir en filas de 3
+                        cols_t = st.columns(min(len(tipos_unicos), 3))
+                        for i, tipo in enumerate(tipos_unicos):
+                            cant = int(df_a[df_a['Tipo'] == tipo]['Cantidad'].sum())
+                            EMOJIS = {
+                                'VALORACION': '💻', 'VALORACION VIRTUAL': '💻',
+                                'SEGUIMIENTO': '📞', 'PRESUPUESTAR': '💵',
+                                'AGENDAR': '📅', 'COLOCAR DATOS': '📝',
+                                'SOPORTE HUMANO': '🤝',
+                            }
+                            emoji = EMOJIS.get(tipo.upper(), '📌')
+                            cols_t[i % 3].metric(f"{emoji} {tipo.capitalize()}", cant)
+                    else:
+                        st.info("Sin tareas registradas.")
+
                     st.markdown("</div>", unsafe_allow_html=True)
         else:
             st.info("📝 Sin tareas registradas.")
