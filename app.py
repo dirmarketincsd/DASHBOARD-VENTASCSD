@@ -566,34 +566,6 @@ with tab1:
     if df_filtrado.empty:
         st.warning("⚠️ Sin registros para estos filtros.")
     else:
-        # ── KPIs filtrados — Grupo USA ──
-        df_usa_f = df_filtrado[df_filtrado['Grupo_Pais']=='USA'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
-        st.markdown('<div style="color:#7c6af7;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">🇺🇸 Grupo USA (filtrado)</div>', unsafe_allow_html=True)
-        u1,u2,u3,u4,u5,u6,u7 = st.columns(7)
-        u1.metric("💬 WPP",        get_val(df_usa_f,'Leads WPP'))
-        u2.metric("📸 IG",         get_val(df_usa_f,'Leads IG'))
-        u3.metric("📝 Formulario", get_val(df_usa_f,'Leads Formulario'))
-        u4.metric("🌐 Landing",    get_val(df_usa_f,'Leads Landing'))
-        u5.metric("🎵 TikTok",     get_val(df_usa_f,'Leads TikTok'))
-        u6.metric("⭐ Valoraciones",get_val(df_usa_f,'Valoraciones'))
-        u7.metric("💰 Depósitos",  get_val(df_usa_f,'Cierres'))
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # ── KPIs filtrados — Grupo España ──
-        df_esp_f = df_filtrado[df_filtrado['Grupo_Pais']=='España'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
-        st.markdown('<div style="color:#00d4aa;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">🇪🇸 Grupo España (filtrado)</div>', unsafe_allow_html=True)
-        e1,e2,e3,e4,e5,e6,e7 = st.columns(7)
-        e1.metric("💬 WPP",        get_val(df_esp_f,'Leads WPP'))
-        e2.metric("📸 IG",         get_val(df_esp_f,'Leads IG'))
-        e3.metric("📝 Formulario", get_val(df_esp_f,'Leads Formulario'))
-        e4.metric("🌐 Landing",    get_val(df_esp_f,'Leads Landing'))
-        e5.metric("🎵 TikTok",     get_val(df_esp_f,'Leads TikTok'))
-        e6.metric("⭐ Valoraciones",get_val(df_esp_f,'Valoraciones'))
-        e7.metric("💰 Depósitos",  get_val(df_esp_f,'Cierres'))
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
         # ── Tabla ──
         cols_vis = ['Fecha','Dia_Semana','Responsable','Grupo_Pais',
                     'Leads WPP','Leads IG','Leads Formulario','Leads Landing','Leads TikTok',
