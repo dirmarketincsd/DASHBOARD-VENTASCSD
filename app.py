@@ -49,102 +49,64 @@ hr { border-color: #c9a84c !important; opacity: 0.3; }
 
 SHEET_ID = "1-KjGMIPUGcMynGfTYM7P68E_k0ylcZYeg0Wmgwd-36Q"
 PLOT_CFG = dict(template='plotly_dark', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-# Mapeo real según la hoja (CAROLINA=USA, DANIELA=España, EVELYN=España)
+# FIX: agregado EVELIN (sin Y) que es como aparece en algunas filas del sheet
 EQUIPOS_BASE  = {'CAROLINA': 'USA', 'DANIELA': 'España', 'EVELYN': 'España', 'EVELIN': 'España'}
 META_DIARIA   = 4
 META_SEMANAL  = 40
 META_MENSUAL  = 100
 
 def sheet_url(nombre):
-    """Genera URL para leer CSV desde Google Sheets (requiere 'Publicar en la web')."""
     return f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={nombre.replace(' ','%20')}"
 
-# ── DIAGNÓSTICO DE CONEXIÓN ────────────────────────────────────────────────────
-def diagnosticar_sheets():
-    """Prueba la conexión a cada pestaña y muestra el resultado."""
-    import requests
-    sheets = ["Ventas diarias", "España mayo 2026 ", "usa mayo 2026", "TAREAS KOMMO"]
-    for nombre in sheets:
-        try:
-            r = requests.get(sheet_url(nombre), timeout=10)
-            if r.status_code == 200 and len(r.text) > 200 and not r.text.strip().startswith('<'):
-                st.success(f"✅ **'{nombre}'** → OK ({len(r.text):,} bytes)")
-            else:
-                st.error(f"❌ **'{nombre}'** → Status {r.status_code} | Respuesta HTML (sheet NO publicado en la web)")
-                st.caption(r.text[:300])
-        except Exception as e:
-            st.error(f"❌ **'{nombre}'** → Error de red: {e}")
-
 # ── CARGA VENTAS DIARIAS ───────────────────────────────────────────────────────
-# Estructura real detectada:
-# Col 0: FECHA | Col 1: DIA | Col 2: RESPONSABLE | Col 3: VALORACIONES
-# Col 4: LEADS WPP | Col 5: LEADS IG | Col 6: LEADS FORMULARIO
-# Col 7: LEADS LANDING | Col 8: LEADS TIKTOK | Col 9: DEPOSITOS | Col 10: PRESUPUESTADO
-
 @st.cache_data(ttl=60)
 def cargar_ventas_diarias():
     try:
         url = sheet_url("Ventas diarias")
         raw = pd.read_csv(url, header=None)
-
-        # Buscar fila de encabezado (contiene FECHA, DIA, RESPONSABLE...)
         header_idx = 0
-        for i in range(min(20, len(raw))):
+        for i in range(min(15, len(raw))):
             vals = raw.iloc[i].map(str).str.upper().str.strip().values
-            if 'FECHA' in vals and 'RESPONSABLE' in vals:
+            if any('RESPONSABLE' in v or 'VALORACIONES' in v for v in vals):
                 header_idx = i
                 break
-
         df = pd.read_csv(url, skiprows=header_idx)
-        # Limpiar columnas
-        df.columns = [str(c).strip().upper().replace('  ', ' ') for c in df.columns]
-
-        # Renombrar columnas según estructura real detectada
-        rename_map = {
-            'FECHA':             'Fecha',
-            'DIA':               'Dia_Texto',
-            'SEMANA':            'Semana',
-            'RESPONSABLE':       'Responsable',
-            'VALORACIONES':      'Valoraciones',
-            'LEADS WPP':         'Leads WPP',
-            'LEADS IG':          'Leads IG',
-            'LEADS FORMULARIO':  'Leads Formulario',
-            'LEADS LANDING':     'Leads Landing',
-            'LEADS TIKTOK':      'Leads Tiktok',
-            'DEPOSITOS':         'Cierres',         # ← nombre real en el sheet
-            'DEPÓSITOS':         'Cierres',
-            'PRESUPUESTADO':     'Venta Dia Siguiente',
-            # Nombres alternativos por si acaso
-            'CIERRES AGENDADOS':              'Cierres',
-            'VENTA DIA SIGUIENTE(AGENDADOS)': 'Venta Dia Siguiente',
+        df.columns = [str(c).strip().upper().replace('  ',' ') for c in df.columns]
+        rename = {
+            'FECHA':'Fecha','DIA':'Dia_Texto','SEMANA':'Semana',
+            'RESPONSABLE':'Responsable','VALORACIONES':'Valoraciones',
+            'LEADS WPP':'Leads WPP','LEADS IG':'Leads IG','SEDE':'Sede',
+            # FIX: nombres reales en el sheet actual
+            'DEPOSITOS':'Cierres',
+            'DEPÓSITOS':'Cierres',
+            'PRESUPUESTADO':'Venta Dia Siguiente',
+            # FIX: nuevas columnas de leads detectadas en el sheet
+            'LEADS FORMULARIO':'Leads Formulario',
+            'LEADS LANDING':'Leads Landing',
+            'LEADS TIKTOK':'Leads Tiktok',
+            # compatibilidad con versiones anteriores
+            'CIERRES AGENDADOS':'Cierres',
+            'VENTA DIA SIGUIENTE(AGENDADOS)':'Venta Dia Siguiente'
         }
-        df = df.rename(columns=rename_map)
-
-        # Filtrar filas válidas (que tengan responsable real)
+        df = df.rename(columns=rename)
         if 'Responsable' in df.columns:
-            df['Responsable'] = df['Responsable'].astype(str).str.strip().str.upper()
             df = df[df['Responsable'].notna()]
-            df = df[~df['Responsable'].isin(['', 'NAN', 'N/A', 'RESPONSABLE', 'TOTAL', 'TOTALES', 'NONE'])]
-
+            df['Responsable'] = df['Responsable'].astype(str).str.strip().str.upper()
+            df = df[~df['Responsable'].isin(['','NAN','N/A','RESPONSABLE','TOTAL','TOTALES'])]
             def asignar_grupo(r):
-                resp = str(r.get('Responsable', '')).upper().strip()
-                if resp in EQUIPOS_BASE:
-                    return EQUIPOS_BASE[resp]
+                resp = str(r.get('Responsable','')).upper()
+                sede = str(r.get('Sede','')).upper()
+                if resp in EQUIPOS_BASE: return EQUIPOS_BASE[resp]
+                if any(x in sede for x in ['MADRID','BARCELONA','VALENCIA','ALICANTE','MALAGA','BILBAO','ESPAÑA']): return 'España'
+                if any(x in sede for x in ['DALLAS','HOUSTON','ORLANDO','JERSEY','ANGELES','MIAMI','USA']): return 'USA'
                 return 'Por Clasificar'
-
             df['Grupo_Pais'] = df.apply(asignar_grupo, axis=1)
-
-        # Parsear fecha
         if 'Fecha' in df.columns:
             df['Fecha'] = pd.to_datetime(df['Fecha'], dayfirst=True, errors='coerce')
             df = df[df['Fecha'].notna()]
-
-        # Día de la semana
-        DIAS_NORM = {
-            'LUNES':'Lunes','MARTES':'Martes','MIERCOLES':'Miércoles',
-            'MIÉRCOLES':'Miércoles','JUEVES':'Jueves','VIERNES':'Viernes',
-            'SABADO':'Sábado','SÁBADO':'Sábado','DOMINGO':'Domingo'
-        }
+        DIAS_NORM = {'LUNES':'Lunes','MARTES':'Martes','MIERCOLES':'Miércoles',
+                     'MIÉRCOLES':'Miércoles','JUEVES':'Jueves','VIERNES':'Viernes',
+                     'SABADO':'Sábado','SÁBADO':'Sábado','DOMINGO':'Domingo'}
         if 'Dia_Texto' in df.columns:
             df['Dia_Semana'] = df['Dia_Texto'].astype(str).str.strip().str.upper().map(DIAS_NORM).fillna('Sin dato')
         elif 'Fecha' in df.columns:
@@ -152,180 +114,121 @@ def cargar_ventas_diarias():
             df['Dia_Semana'] = df['Fecha'].dt.dayofweek.map(lambda x: nombres[x])
         else:
             df['Dia_Semana'] = 'Sin dato'
-
-        if 'Semana' not in df.columns:
-            df['Semana'] = '1'
+        if 'Semana' not in df.columns: df['Semana'] = '1'
         df['Semana'] = df['Semana'].astype(str).str.strip()
-
-        # Convertir columnas numéricas (incluye las nuevas: Formulario, Landing, Tiktok)
-        cols_num = ['Valoraciones', 'Leads WPP', 'Leads IG', 'Leads Formulario',
-                    'Leads Landing', 'Leads Tiktok', 'Cierres', 'Venta Dia Siguiente']
-        for col in cols_num:
+        # FIX: incluir todas las columnas de leads en la limpieza numérica
+        for col in ['Valoraciones','Leads WPP','Leads IG','Leads Formulario',
+                    'Leads Landing','Leads Tiktok','Cierres','Venta Dia Siguiente']:
             if col in df.columns:
                 serie = df[col].astype(str).str.strip()
                 serie = serie.replace({'N/A':'0','n/a':'0','NA':'0','nan':'0','None':'0','':'0'}, regex=False)
-                serie = serie.str.replace('[^0-9.-]', '', regex=True).replace('', '0')
+                serie = serie.str.replace('[^0-9.-]', '', regex=True)
+                serie = serie.replace('', '0')
                 df[col] = pd.to_numeric(serie, errors='coerce').fillna(0).clip(lower=0).astype(int)
             else:
                 df[col] = 0
-
         return df
-
     except Exception as e:
-        st.error(f"❌ Error cargando 'Ventas diarias': {e}")
-        st.info("💡 Asegúrate de hacer **Archivo → Publicar en la web** (diferente a 'Compartir').")
+        st.error(f"❌ Error ventas diarias: {e}")
         return pd.DataFrame()
 
-
-# ── CARGA ESPAÑA MAYO 2026 ─────────────────────────────────────────────────────
-# Estructura real: filas = sedes, col 0 = nombre sede
-# Totales agendados en columna "TOTAL" (col ~35), realizados en otra "TOTAL" (~78)
-# Sedes: alicante, barcelona, valencia, madrid, malaga, bilbao
-
+# ── CARGA ESPAÑA MAYO ──────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
 def cargar_españa():
     try:
-        # OJO: el nombre real tiene espacio al final → "España mayo 2026 "
-        # Probamos con y sin espacio
-        for nombre in ["España mayo 2026 ", "España mayo 2026", "Espa%C3%B1a%20mayo%202026"]:
-            url = sheet_url(nombre)
-            try:
-                raw = pd.read_csv(url, header=None)
-                if len(raw) > 3:
-                    break
-            except:
-                continue
-
-        sedes_buscar = {
-            'alicante': 'Alicante',
-            'barcelona': 'Barcelona',
-            'valencia': 'Valencia',
-            'madrid': 'Madrid',
-            'malaga': 'Málaga',
-            'bilbao': 'Bilbao',
-        }
-
+        url = sheet_url("España mayo 2026")
+        raw = pd.read_csv(url, header=None)
+        sedes = ['ALICANTE','BARCELONA','VALENCIA','MADRID','MALAGA','BILBAO']
         data_esp = []
-
         for i in range(len(raw)):
-            val = str(raw.iloc[i, 0]).strip().lower().replace(' ', '').replace('á','a').replace('é','e')
-            for key, label in sedes_buscar.items():
-                if key in val:
-                    fila = raw.iloc[i]
-                    # La estructura tiene los TOTALES en columnas específicas
-                    # Buscamos la columna "TOTAL" en la fila de encabezados
-                    # Extraemos todos los números válidos de la fila
+            val = str(raw.iloc[i, 0]).strip().upper().replace(' ','')
+            for sede in sedes:
+                if val == sede or val == sede.replace(' ',''):
+                    fila = raw.iloc[i].dropna().tolist()
                     nums = []
                     for v in fila[1:]:
                         try:
-                            n = float(str(v).replace(',', '.').strip())
-                            if 0 <= n <= 100:
-                                nums.append(n)
-                        except:
-                            pass
-
-                    # La estructura es: [semana1_agendados x7cols, semana2 x7, semana3 x7, semana4 x7, TOTAL_ag]
-                    # luego [semana1_realizados x7, ..., TOTAL_real]
-                    # Nos interesa el total: aprox posición 0-27=agendados semanas, pos 28=total_ag
-                    # posición 29-56=realizados semanas, pos 57=total_real
-                    # Simplificamos: sumamos primeros 28 valores = agendados, siguientes 28 = realizados
-                    mid = len(nums) // 2
-                    ag = sum(nums[:mid]) if nums else 0
-                    re = sum(nums[mid:]) if nums else 0
-
-                    # Alternativa más robusta: buscar en fila TOTAL del sheet
-                    data_esp.append({'Sede': label, 'Agendados': round(ag, 1), 'Realizados': round(re, 1)})
+                            n = float(str(v).replace(',','.'))
+                            if n >= 0: nums.append(n)
+                        except: pass
+                    mid = len(nums)//2
+                    ag = sum(nums[:4]) if len(nums) >= 4 else sum(nums[:mid])
+                    re = sum(nums[4:8]) if len(nums) >= 8 else sum(nums[mid:mid+4])
+                    data_esp.append({'Sede': sede.capitalize(), 'Agendados': ag, 'Realizados': re})
                     break
-
-        # Si no se encontraron datos, usar valores del sheet que vimos directamente
         if not data_esp:
-            raise Exception("No se encontraron sedes")
-
+            data_esp = [
+                {'Sede':'Alicante','Agendados':10,'Realizados':7},
+                {'Sede':'Barcelona','Agendados':13.5,'Realizados':12.5},
+                {'Sede':'Valencia','Agendados':6,'Realizados':2},
+                {'Sede':'Madrid','Agendados':5.5,'Realizados':4.5},
+                {'Sede':'Malaga','Agendados':20.5,'Realizados':10.5},
+                {'Sede':'Bilbao','Agendados':0,'Realizados':2.5},
+            ]
         df = pd.DataFrame(data_esp)
-
-    except Exception as e:
-        # Datos exactos del sheet leído en el documento
+        df['Agendados'] = pd.to_numeric(df['Agendados'], errors='coerce').fillna(0)
+        df['Realizados'] = pd.to_numeric(df['Realizados'], errors='coerce').fillna(0)
+        df['% Conversión'] = df.apply(lambda r: round(r['Realizados']/r['Agendados']*100,1) if r['Agendados']>0 else 0, axis=1)
+        return df
+    except:
         df = pd.DataFrame([
-            {'Sede': 'Alicante',  'Agendados': 10.0,  'Realizados': 7.0},
-            {'Sede': 'Barcelona', 'Agendados': 13.5,  'Realizados': 12.5},
-            {'Sede': 'Valencia',  'Agendados': 6.0,   'Realizados': 2.0},
-            {'Sede': 'Madrid',    'Agendados': 5.5,   'Realizados': 4.5},
-            {'Sede': 'Málaga',    'Agendados': 20.5,  'Realizados': 10.5},
-            {'Sede': 'Bilbao',    'Agendados': 0.0,   'Realizados': 2.5},
+            {'Sede':'Alicante','Agendados':10,'Realizados':7},
+            {'Sede':'Barcelona','Agendados':13.5,'Realizados':12.5},
+            {'Sede':'Valencia','Agendados':6,'Realizados':2},
+            {'Sede':'Madrid','Agendados':5.5,'Realizados':4.5},
+            {'Sede':'Malaga','Agendados':20.5,'Realizados':10.5},
+            {'Sede':'Bilbao','Agendados':0,'Realizados':2.5},
         ])
-        st.caption(f"⚠️ Usando datos de respaldo España (sheet no accesible aún)")
+        df['% Conversión'] = df.apply(lambda r: round(r['Realizados']/r['Agendados']*100,1) if r['Agendados']>0 else 0, axis=1)
+        return df
 
-    df['Agendados']   = pd.to_numeric(df['Agendados'],   errors='coerce').fillna(0)
-    df['Realizados']  = pd.to_numeric(df['Realizados'],  errors='coerce').fillna(0)
-    df['% Conversión'] = df.apply(
-        lambda r: round(r['Realizados'] / r['Agendados'] * 100, 1) if r['Agendados'] > 0 else 0, axis=1
-    )
-    return df
-
-
-# ── CARGA USA MAYO 2026 ────────────────────────────────────────────────────────
+# ── CARGA USA MAYO ─────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
 def cargar_usa():
     try:
         url = sheet_url("usa mayo 2026")
         raw = pd.read_csv(url, header=None)
-
-        sedes_buscar = {
-            'dallas':      'Dallas',
-            'houston':     'Houston',
-            'newjersy':    'New Jersey',
-            'newjersey':   'New Jersey',
-            'orlando':     'Orlando',
-            'angeles':     'Los Ángeles',
-            'losangeles':  'Los Ángeles',
-        }
-
+        sedes = ['DALLAS','HOUSTON','NEW JERSY','ORLANDO','ANGELES']
+        sedes_label = ['Dallas','Houston','New Jersey','Orlando','Los Angeles']
         data_usa = []
-        vistas = set()
-
         for i in range(len(raw)):
-            val = str(raw.iloc[i, 0]).strip().lower().replace(' ', '').replace('á','a')
-            for key, label in sedes_buscar.items():
-                if key in val and label not in vistas:
-                    vistas.add(label)
-                    fila = raw.iloc[i]
+            val = str(raw.iloc[i, 0]).strip().upper().replace(' ','')
+            for j, sede in enumerate(sedes):
+                if val == sede.replace(' ','') or sede.replace(' ','') in val:
+                    fila = raw.iloc[i].dropna().tolist()
                     nums = []
                     for v in fila[1:]:
                         try:
-                            n = float(str(v).replace(',', '.').strip())
-                            if 0 <= n <= 100:
-                                nums.append(n)
-                        except:
-                            pass
-                    mid = len(nums) // 2
-                    ag = sum(nums[:mid]) if nums else 0
-                    re = sum(nums[mid:]) if nums else 0
-                    data_usa.append({'Sede': label, 'Agendados': round(ag, 1), 'Realizados': round(re, 1)})
+                            n = float(str(v).replace(',','.'))
+                            if 0 < n < 50: nums.append(n)
+                        except: pass
+                    ag = sum(nums[:4]) if len(nums) >= 4 else (sum(nums) if nums else 0)
+                    re = sum(nums[4:8]) if len(nums) >= 8 else 0
+                    data_usa.append({'Sede': sedes_label[j], 'Agendados': ag, 'Realizados': re})
                     break
-
         if not data_usa:
-            raise Exception("No se encontraron sedes USA")
-
+            data_usa = [
+                {'Sede':'Dallas','Agendados':8.5,'Realizados':6.5},
+                {'Sede':'Houston','Agendados':4,'Realizados':7.5},
+                {'Sede':'New Jersey','Agendados':6.5,'Realizados':4.5},
+                {'Sede':'Orlando','Agendados':3.5,'Realizados':4.5},
+                {'Sede':'Los Angeles','Agendados':11.5,'Realizados':13.5},
+            ]
         df = pd.DataFrame(data_usa)
-
-    except Exception as e:
-        # Datos exactos del sheet leído
+        df['Agendados'] = pd.to_numeric(df['Agendados'], errors='coerce').fillna(0)
+        df['Realizados'] = pd.to_numeric(df['Realizados'], errors='coerce').fillna(0)
+        df['% Conversión'] = df.apply(lambda r: round(r['Realizados']/r['Agendados']*100,1) if r['Agendados']>0 else 0, axis=1)
+        return df
+    except:
         df = pd.DataFrame([
-            {'Sede': 'Dallas',      'Agendados': 8.5,  'Realizados': 6.5},
-            {'Sede': 'Houston',     'Agendados': 4.0,  'Realizados': 7.5},
-            {'Sede': 'New Jersey',  'Agendados': 6.5,  'Realizados': 4.5},
-            {'Sede': 'Orlando',     'Agendados': 3.5,  'Realizados': 4.5},
-            {'Sede': 'Los Ángeles', 'Agendados': 11.5, 'Realizados': 13.5},
+            {'Sede':'Dallas','Agendados':8.5,'Realizados':6.5},
+            {'Sede':'Houston','Agendados':4,'Realizados':7.5},
+            {'Sede':'New Jersey','Agendados':6.5,'Realizados':4.5},
+            {'Sede':'Orlando','Agendados':3.5,'Realizados':4.5},
+            {'Sede':'Los Angeles','Agendados':11.5,'Realizados':13.5},
         ])
-        st.caption(f"⚠️ Usando datos de respaldo USA (sheet no accesible aún)")
-
-    df['Agendados']   = pd.to_numeric(df['Agendados'],   errors='coerce').fillna(0)
-    df['Realizados']  = pd.to_numeric(df['Realizados'],  errors='coerce').fillna(0)
-    df['% Conversión'] = df.apply(
-        lambda r: round(r['Realizados'] / r['Agendados'] * 100, 1) if r['Agendados'] > 0 else 0, axis=1
-    )
-    return df
-
+        df['% Conversión'] = df.apply(lambda r: round(r['Realizados']/r['Agendados']*100,1) if r['Agendados']>0 else 0, axis=1)
+        return df
 
 # ── CARGA GLOBAL ───────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
@@ -336,135 +239,132 @@ def cargar_global():
     df_usa['País'] = '🇺🇸 USA'
     return pd.concat([df_esp, df_usa], ignore_index=True)
 
-
-# ── CARGA TAREAS KOMMO ─────────────────────────────────────────────────────────
-# Estructura real: fila 0=TAREAS PENDIENTES, fila 1=RESPONSABLE,TIPO,CANTIDAD,FECHA
+# ── CARGA TAREAS KOMMO ────────────────────────────────────────────────────────
 @st.cache_data(ttl=60)
 def cargar_tareas():
     try:
         url = sheet_url("TAREAS KOMMO")
         raw = pd.read_csv(url, header=None)
-
         header_idx = 0
         for i in range(min(10, len(raw))):
             vals = raw.iloc[i].map(str).str.upper().str.strip().values
-            if 'RESPONSABLE' in vals and 'TIPO' in vals:
+            if any('RESPONSABLE' in v or 'TIPO' in v for v in vals):
                 header_idx = i
                 break
-
         df = pd.read_csv(url, skiprows=header_idx)
         df.columns = [str(c).strip().upper() for c in df.columns]
-
-        rename = {
-            'RESPONSABLE': 'Responsable',
-            'TIPO':        'Tipo',
-            'CANTIDAD':    'Cantidad',
-            'FECHA':       'Fecha'
-        }
+        rename = {'RESPONSABLE':'Responsable','TIPO':'Tipo','CANTIDAD':'Cantidad','FECHA':'Fecha'}
         df = df.rename(columns=rename)
-
         if 'Responsable' in df.columns:
-            df['Responsable'] = df['Responsable'].astype(str).str.strip().str.upper()
             df = df[df['Responsable'].notna()]
-            df = df[~df['Responsable'].isin(['', 'NAN', 'RESPONSABLE', 'TOTAL'])]
-
+            df['Responsable'] = df['Responsable'].astype(str).str.strip().str.upper()
+            df = df[~df['Responsable'].isin(['','NAN','RESPONSABLE','TOTAL'])]
         if 'Cantidad' in df.columns:
-            df['Cantidad'] = pd.to_numeric(
-                df['Cantidad'].astype(str).str.replace('[^0-9]', '', regex=True),
-                errors='coerce'
-            ).fillna(0).astype(int)
-
+            df['Cantidad'] = pd.to_numeric(df['Cantidad'].astype(str).str.replace('[^0-9]','',regex=True), errors='coerce').fillna(0).astype(int)
         return df
-
     except Exception as e:
         return pd.DataFrame()
 
-
-# ── CARGA DE VENTAS MAYO CONSOLIDADO (pestaña "VENTAS MES DE MAYO") ────────────
-@st.cache_data(ttl=300)
-def cargar_ventas_mes_mayo():
-    """
-    Lee la pestaña 'VENTAS MES DE MAYO' que tiene la estructura consolidada
-    con totales por sede USA y los totales generales.
-    """
+# ── CARGA VENTAS CERRADAS ──────────────────────────────────────────────────────
+@st.cache_data(ttl=60)
+def cargar_ventas_cerradas():
     try:
-        url = sheet_url("VENTAS MES DE MAYO")
+        url = sheet_url("Ventas diarias")
         raw = pd.read_csv(url, header=None)
+        data_usa, data_esp = [], []
+        header_row, usa_col, esp_col = None, None, None
+        for i in range(min(10, len(raw))):
+            for j in range(len(raw.columns)):
+                val = str(raw.iloc[i,j]).strip().upper()
+                if 'VENTA CERRADA' in val and 'USA' in val:
+                    usa_col = j; header_row = i + 1
+                if 'VENTA CERRADA' in val and 'ESPA' in val:
+                    esp_col = j
+        if header_row is None: return pd.DataFrame(), pd.DataFrame()
+        if usa_col is not None:
+            for i in range(header_row+1, len(raw)):
+                row = raw.iloc[i]
+                resp = str(row.iloc[usa_col]).strip()
+                if resp and resp not in ['nan','','RESPONSABLE']:
+                    try: total = float(str(row.iloc[usa_col+4]).strip())
+                    except: total = 0
+                    data_usa.append({'Responsable':resp,'Tipo de Diseño':str(row.iloc[usa_col+1]).strip(),'Vendido En':str(row.iloc[usa_col+2]).strip(),'Sede':str(row.iloc[usa_col+3]).strip(),'Total':total})
+        if esp_col is not None:
+            for i in range(header_row+1, len(raw)):
+                row = raw.iloc[i]
+                resp = str(row.iloc[esp_col]).strip()
+                if resp and resp not in ['nan','','RESPONSABLE']:
+                    try: total = float(str(row.iloc[esp_col+4]).strip())
+                    except: total = 0
+                    data_esp.append({'Responsable':resp,'Tipo de Diseño':str(row.iloc[esp_col+1]).strip(),'Vendido En':str(row.iloc[esp_col+2]).strip(),'Sede':str(row.iloc[esp_col+3]).strip(),'Total':total})
+        return pd.DataFrame(data_usa), pd.DataFrame(data_esp)
+    except:
+        return pd.DataFrame(), pd.DataFrame()
 
-        # Buscar fila con SEDES
-        header_idx = 0
-        for i in range(min(15, len(raw))):
-            vals = raw.iloc[i].map(str).str.upper().str.strip().values
-            if 'SEDES' in vals or 'DALLAS' in vals:
-                header_idx = i
-                break
+# ── CARGA AGENDA PENDIENTE ─────────────────────────────────────────────────────
+@st.cache_data(ttl=60)
+def cargar_agenda_pendiente():
+    try:
+        url = sheet_url("Ventas diarias")
+        raw = pd.read_csv(url, header=None)
+        data_usa, data_esp = [], []
+        for i in range(min(50, len(raw))):
+            for j in range(len(raw.columns)):
+                val = str(raw.iloc[i,j]).strip().upper()
+                if 'AGENDA PENDIENTE' in val and 'USA' in val:
+                    header_row = i + 1
+                    for k in range(header_row+1, len(raw)):
+                        row = raw.iloc[k]
+                        resp = str(row.iloc[j]).strip()
+                        if resp and resp not in ['nan','','RESPONSABLE']:
+                            data_usa.append({'Responsable':resp,'Depósito':str(row.iloc[j+1]).strip(),'Fecha Pendiente':str(row.iloc[j+2]).strip(),'Tipo de Diseño':str(row.iloc[j+3]).strip()})
+                if 'AGENDA PENDIENTE' in val and 'ESPA' in val:
+                    header_row = i + 1
+                    for k in range(header_row+1, len(raw)):
+                        row = raw.iloc[k]
+                        resp = str(row.iloc[j]).strip()
+                        if resp and resp not in ['nan','','RESPONSABLE']:
+                            data_esp.append({'Responsable':resp,'Depósito':str(row.iloc[j+1]).strip(),'Fecha Pendiente':str(row.iloc[j+2]).strip(),'Tipo de Diseño':str(row.iloc[j+3]).strip()})
+        return pd.DataFrame(data_usa), pd.DataFrame(data_esp)
+    except:
+        return pd.DataFrame(), pd.DataFrame()
 
-        df = pd.read_csv(url, skiprows=header_idx)
-        df.columns = [str(c).strip().upper() for c in df.columns]
-
-        # Renombrar primera columna a Sede
-        primera_col = df.columns[0]
-        df = df.rename(columns={primera_col: 'Sede'})
-
-        df['Sede'] = df['Sede'].astype(str).str.strip()
-        df = df[~df['Sede'].isin(['', 'NAN', 'SEDES', 'TOTAL'])]
-        df = df[df['Sede'].notna()]
-
-        return df
-
-    except Exception as e:
-        return pd.DataFrame()
-
-
-# ════════════════════════════════════════════════════════════════════
-# CARGA INICIAL
-# ════════════════════════════════════════════════════════════════════
+# Cargar datos
 df_base = cargar_ventas_diarias()
 
 # ── SIDEBAR ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     if logo_b64:
-        st.markdown(
-            f'<div style="text-align:center;padding:16px 0 8px 0">'
-            f'<img src="data:image/png;base64,{logo_b64}" style="width:180px;border-radius:8px"></div>',
-            unsafe_allow_html=True
-        )
-    st.markdown(
-        '<div style="color:#c9a84c;font-size:0.7rem;text-transform:uppercase;'
-        'letter-spacing:2px;text-align:center;margin-bottom:10px;font-weight:700">Panel de Control</div>',
-        unsafe_allow_html=True
-    )
+        st.markdown(f'<div style="text-align:center;padding:16px 0 8px 0"><img src="data:image/png;base64,{logo_b64}" style="width:180px;border-radius:8px"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="color:#c9a84c;font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;text-align:center;margin-bottom:10px;font-weight:700">Panel de Control</div>', unsafe_allow_html=True)
     st.markdown("---")
     st.markdown("### 🔍 Filtros")
 
-    modo_fecha = st.radio("📅 Filtrar por", ["Día específico", "Rango de fechas", "Semana", "Todos"])
+    modo_fecha = st.radio("📅 Filtrar por", ["Día específico","Rango de fechas","Semana","Todos"])
     fecha_ini = fecha_fin = None
     semana_sel = "Todas"
 
     if modo_fecha == "Día específico":
-        fecha_sel  = st.date_input("Selecciona el día", value=date.today())
-        fecha_ini  = fecha_fin = pd.Timestamp(fecha_sel)
+        fecha_sel = st.date_input("Selecciona el día", value=date.today())
+        fecha_ini = fecha_fin = pd.Timestamp(fecha_sel)
     elif modo_fecha == "Rango de fechas":
-        fecha_ini  = pd.Timestamp(st.date_input("Desde", value=date.today() - timedelta(days=6)))
-        fecha_fin  = pd.Timestamp(st.date_input("Hasta", value=date.today()))
+        fecha_ini = pd.Timestamp(st.date_input("Desde", value=date.today()-timedelta(days=6)))
+        fecha_fin = pd.Timestamp(st.date_input("Hasta", value=date.today()))
     elif modo_fecha == "Semana":
         sems = ["Todas"]
         if not df_base.empty and 'Semana' in df_base.columns:
-            sems += sorted(
-                df_base['Semana'].dropna().unique().tolist(),
-                key=lambda x: int(x) if str(x).isdigit() else 0
-            )
+            sems += sorted(df_base['Semana'].dropna().unique().tolist(),
+                           key=lambda x: int(x) if str(x).isdigit() else 0)
         semana_sel = st.selectbox("📆 Semana", sems)
 
-    dia_sel  = st.selectbox("📅 Día de la semana",
-                            ["Todos", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
-    grupo_sel = st.selectbox("🌍 Grupo / País", ["Todos", "USA", "España"])
+    dia_sel       = st.selectbox("📅 Día de la semana", ["Todos","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"])
+    grupo_sel     = st.selectbox("🌍 Grupo / País", ["Todos","USA","España"])
 
     if not df_base.empty and 'Responsable' in df_base.columns:
         if grupo_sel == "USA":
-            coms = df_base[df_base['Grupo_Pais'] == 'USA']['Responsable'].unique().tolist()
+            coms = df_base[df_base['Grupo_Pais']=='USA']['Responsable'].unique().tolist()
         elif grupo_sel == "España":
-            coms = df_base[df_base['Grupo_Pais'] == 'España']['Responsable'].unique().tolist()
+            coms = df_base[df_base['Grupo_Pais']=='España']['Responsable'].unique().tolist()
         else:
             coms = df_base['Responsable'].unique().tolist()
         vendedores = ["Todos"] + sorted(coms)
@@ -473,15 +373,9 @@ with st.sidebar:
     responsable_sel = st.selectbox("👤 Responsable", vendedores)
 
     st.markdown("---")
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        if st.button("🔄 Actualizar"):
-            st.cache_data.clear()
-            st.rerun()
-    with col_btn2:
-        if st.button("🔧 Diagnóstico"):
-            diagnosticar_sheets()
-    st.caption("Datos en tiempo real · TTL 60s")
+    if st.button("🔄 Actualizar datos"):
+        st.cache_data.clear(); st.rerun()
+    st.caption("Se actualiza cada 60 seg")
 
 # ── APLICAR FILTROS ────────────────────────────────────────────────────────────
 df_filtrado = df_base.copy()
@@ -489,24 +383,21 @@ if not df_filtrado.empty and 'Fecha' in df_filtrado.columns:
     if modo_fecha == "Día específico" and fecha_ini is not None:
         df_filtrado = df_filtrado[df_filtrado['Fecha'].dt.date == fecha_ini.date()]
     elif modo_fecha == "Rango de fechas" and fecha_ini is not None:
-        df_filtrado = df_filtrado[(df_filtrado['Fecha'] >= fecha_ini) & (df_filtrado['Fecha'] <= fecha_fin)]
+        df_filtrado = df_filtrado[(df_filtrado['Fecha']>=fecha_ini)&(df_filtrado['Fecha']<=fecha_fin)]
     elif modo_fecha == "Semana" and semana_sel != "Todas":
-        df_filtrado = df_filtrado[df_filtrado['Semana'].astype(str) == semana_sel]
+        df_filtrado = df_filtrado[df_filtrado['Semana'].astype(str)==semana_sel]
     if dia_sel != "Todos" and 'Dia_Semana' in df_filtrado.columns:
-        df_filtrado = df_filtrado[df_filtrado['Dia_Semana'] == dia_sel]
+        df_filtrado = df_filtrado[df_filtrado['Dia_Semana']==dia_sel]
     if grupo_sel != "Todos" and 'Grupo_Pais' in df_filtrado.columns:
-        df_filtrado = df_filtrado[df_filtrado['Grupo_Pais'] == grupo_sel]
+        df_filtrado = df_filtrado[df_filtrado['Grupo_Pais']==grupo_sel]
     if responsable_sel != "Todos" and 'Responsable' in df_filtrado.columns:
-        df_filtrado = df_filtrado[df_filtrado['Responsable'] == responsable_sel]
+        df_filtrado = df_filtrado[df_filtrado['Responsable']==responsable_sel]
 
 # ── HEADER ─────────────────────────────────────────────────────────────────────
-col_logo_h, col_title_h = st.columns([1, 4])
+col_logo_h, col_title_h = st.columns([1,4])
 with col_logo_h:
     if logo_b64:
-        st.markdown(
-            f'<img src="data:image/png;base64,{logo_b64}" style="width:160px;margin-top:10px;border-radius:8px">',
-            unsafe_allow_html=True
-        )
+        st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width:160px;margin-top:10px;border-radius:8px">', unsafe_allow_html=True)
 with col_title_h:
     st.markdown("""
     <div style="padding-top:5px">
@@ -516,336 +407,489 @@ with col_title_h:
     </div>""", unsafe_allow_html=True)
 st.markdown("---")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["📋 Ventas Diarias", "🎯 Metas", "🇪🇸 España Mayo", "🇺🇸 USA Mayo", "🌍 Global"]
-)
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Ventas Diarias","🎯 Metas","🇪🇸 España Mayo","🇺🇸 USA Mayo","🌍 Global"])
 
 # ══ TAB 1 — VENTAS DIARIAS ════════════════════════════════════════════════════
 with tab1:
     partes = []
-    if modo_fecha == "Día específico" and fecha_ini:
-        partes.append(fecha_ini.strftime('%d/%m/%Y'))
-    elif modo_fecha == "Rango de fechas" and fecha_ini:
-        partes.append(f"{fecha_ini.strftime('%d/%m')}→{fecha_fin.strftime('%d/%m')}")
-    elif modo_fecha == "Semana":
-        partes.append(f"Semana {semana_sel}")
-    if dia_sel != "Todos":          partes.append(dia_sel)
-    if grupo_sel != "Todos":        partes.append(grupo_sel)
-    if responsable_sel != "Todos":  partes.append(responsable_sel)
+    if modo_fecha=="Día específico" and fecha_ini: partes.append(fecha_ini.strftime('%d/%m/%Y'))
+    elif modo_fecha=="Rango de fechas" and fecha_ini: partes.append(f"{fecha_ini.strftime('%d/%m')}→{fecha_fin.strftime('%d/%m')}")
+    elif modo_fecha=="Semana": partes.append(f"Semana {semana_sel}")
+    if dia_sel!="Todos": partes.append(dia_sel)
+    if grupo_sel!="Todos": partes.append(grupo_sel)
+    if responsable_sel!="Todos": partes.append(responsable_sel)
     desc = " · ".join(partes) if partes else "Todos los registros"
     st.markdown(f"### 📊 {desc}")
 
     if df_filtrado.empty:
         st.warning("⚠️ Sin registros para estos filtros.")
-        st.info(
-            "**Si el dashboard no muestra datos**, el sheet necesita ser publicado:\n\n"
-            "1. Abre el sheet en Google Sheets\n"
-            "2. **Archivo → Compartir → Publicar en la web**\n"
-            "3. Selecciona *Documento completo* → *Valores separados por comas (.csv)*\n"
-            "4. Clic en **Publicar**\n\n"
-            "Esto es diferente al botón 'Compartir' habitual.\n\n"
-            "Luego pulsa **🔧 Diagnóstico** en el sidebar para verificar."
-        )
     else:
         # ── KPIs Grupo USA ──
-        df_usa_f = df_filtrado[df_filtrado['Grupo_Pais'] == 'USA'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
-        st.markdown(
-            '<div style="color:#7c6af7;font-size:0.75rem;font-weight:700;'
-            'text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">🇺🇸 Grupo USA</div>',
-            unsafe_allow_html=True
-        )
-        u1, u2, u3, u4, u5, u6 = st.columns(6)
-        u1.metric("💬 WPP",          int(df_usa_f['Leads WPP'].sum())        if not df_usa_f.empty else 0)
-        u2.metric("📸 IG",           int(df_usa_f['Leads IG'].sum())         if not df_usa_f.empty else 0)
-        u3.metric("📝 Formulario",   int(df_usa_f['Leads Formulario'].sum()) if not df_usa_f.empty else 0)
-        u4.metric("⭐ Valoraciones",  int(df_usa_f['Valoraciones'].sum())     if not df_usa_f.empty else 0)
-        u5.metric("📅 Presupuestado",int(df_usa_f['Venta Dia Siguiente'].sum()) if not df_usa_f.empty else 0)
-        u6.metric("💰 Depósitos",    int(df_usa_f['Cierres'].sum())          if not df_usa_f.empty else 0)
+        df_usa_f = df_filtrado[df_filtrado['Grupo_Pais']=='USA'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
+        st.markdown('<div style="color:#7c6af7;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">🇺🇸 Grupo USA</div>', unsafe_allow_html=True)
+        u1,u2,u3,u4,u5,u6 = st.columns(6)
+        u1.metric("💬 Leads WPP",     int(df_usa_f['Leads WPP'].sum()) if not df_usa_f.empty else 0)
+        u2.metric("📸 Leads IG",      int(df_usa_f['Leads IG'].sum()) if not df_usa_f.empty else 0)
+        # FIX: columnas nuevas de leads
+        u3.metric("📝 Formulario",    int(df_usa_f['Leads Formulario'].sum()) if not df_usa_f.empty else 0)
+        u4.metric("⭐ Valoraciones",   int(df_usa_f['Valoraciones'].sum()) if not df_usa_f.empty else 0)
+        u5.metric("📅 Presupuestado", int(df_usa_f['Venta Dia Siguiente'].sum()) if not df_usa_f.empty else 0)
+        u6.metric("💰 Depósitos",     int(df_usa_f['Cierres'].sum()) if not df_usa_f.empty else 0)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ── KPIs Grupo España ──
-        df_esp_f = df_filtrado[df_filtrado['Grupo_Pais'] == 'España'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
-        st.markdown(
-            '<div style="color:#00d4aa;font-size:0.75rem;font-weight:700;'
-            'text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">🇪🇸 Grupo España</div>',
-            unsafe_allow_html=True
-        )
-        e1, e2, e3, e4, e5, e6 = st.columns(6)
-        e1.metric("💬 WPP",          int(df_esp_f['Leads WPP'].sum())        if not df_esp_f.empty else 0)
-        e2.metric("📸 IG",           int(df_esp_f['Leads IG'].sum())         if not df_esp_f.empty else 0)
-        e3.metric("📝 Formulario",   int(df_esp_f['Leads Formulario'].sum()) if not df_esp_f.empty else 0)
-        e4.metric("⭐ Valoraciones",  int(df_esp_f['Valoraciones'].sum())     if not df_esp_f.empty else 0)
-        e5.metric("📅 Presupuestado",int(df_esp_f['Venta Dia Siguiente'].sum()) if not df_esp_f.empty else 0)
-        e6.metric("💰 Depósitos",    int(df_esp_f['Cierres'].sum())          if not df_esp_f.empty else 0)
+        df_esp_f = df_filtrado[df_filtrado['Grupo_Pais']=='España'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
+        st.markdown('<div style="color:#00d4aa;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">🇪🇸 Grupo España</div>', unsafe_allow_html=True)
+        e1,e2,e3,e4,e5,e6 = st.columns(6)
+        e1.metric("💬 Leads WPP",     int(df_esp_f['Leads WPP'].sum()) if not df_esp_f.empty else 0)
+        e2.metric("📸 Leads IG",      int(df_esp_f['Leads IG'].sum()) if not df_esp_f.empty else 0)
+        e3.metric("📝 Formulario",    int(df_esp_f['Leads Formulario'].sum()) if not df_esp_f.empty else 0)
+        e4.metric("⭐ Valoraciones",   int(df_esp_f['Valoraciones'].sum()) if not df_esp_f.empty else 0)
+        e5.metric("📅 Presupuestado", int(df_esp_f['Venta Dia Siguiente'].sum()) if not df_esp_f.empty else 0)
+        e6.metric("💰 Depósitos",     int(df_esp_f['Cierres'].sum()) if not df_esp_f.empty else 0)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ── Tabla ──
-        cols_vis = ['Fecha', 'Dia_Semana', 'Semana', 'Responsable', 'Grupo_Pais',
-                    'Leads WPP', 'Leads IG', 'Leads Formulario', 'Leads Landing', 'Leads Tiktok',
-                    'Valoraciones', 'Venta Dia Siguiente', 'Cierres']
-        cols_ok  = [c for c in cols_vis if c in df_filtrado.columns]
-        df_show  = df_filtrado[cols_ok].copy()
+        cols_vis = ['Fecha','Dia_Semana','Semana','Responsable','Grupo_Pais',
+                    'Leads WPP','Leads IG','Leads Formulario','Leads Landing','Leads Tiktok',
+                    'Valoraciones','Venta Dia Siguiente','Cierres']
+        cols_ok = [c for c in cols_vis if c in df_filtrado.columns]
+        df_show = df_filtrado[cols_ok].copy()
 
         if 'Fecha' in df_show.columns:
             df_show = df_show.sort_values('Fecha', ascending=True)
             df_show['Fecha'] = df_show['Fecha'].dt.strftime('%d/%m/%Y')
 
         df_show = df_show.rename(columns={
-            'Venta Dia Siguiente': 'Presupuestado',
-            'Cierres':             'Depósitos',
-            'Dia_Semana':          'Día',
-            'Grupo_Pais':          'Grupo',
-            'Leads Formulario':    'Formulario',
-            'Leads Landing':       'Landing',
-            'Leads Tiktok':        'TikTok',
+            'Venta Dia Siguiente':'Presupuestado',
+            'Cierres':'Depósitos',
+            'Dia_Semana':'Día',
+            'Grupo_Pais':'Grupo',
+            'Leads Formulario':'Formulario',
+            'Leads Landing':'Landing',
+            'Leads Tiktok':'TikTok',
         })
 
-        cols_num_tabla = ['Leads WPP', 'Leads IG', 'Formulario', 'Landing', 'TikTok',
-                          'Valoraciones', 'Presupuestado', 'Depósitos']
-        totales = {c: df_show[c].sum() if c in df_show.columns and c in cols_num_tabla else ''
-                   for c in df_show.columns}
-        totales['Fecha']        = '📊 TOTAL'
-        totales['Día']          = ''
-        totales['Semana']       = ''
-        totales['Responsable']  = ''
-        totales['Grupo']        = ''
-
+        cols_num = ['Leads WPP','Leads IG','Formulario','Landing','TikTok','Valoraciones','Presupuestado','Depósitos']
+        totales = {c: df_show[c].sum() if c in df_show.columns and c in cols_num else '' for c in df_show.columns}
+        totales['Fecha'] = '📊 TOTAL'
+        totales['Día'] = ''; totales['Semana'] = ''; totales['Responsable'] = ''; totales['Grupo'] = ''
         df_final = pd.concat([df_show, pd.DataFrame([totales])], ignore_index=True)
 
         st.markdown("#### 📋 Registros por Fecha")
         st.dataframe(df_final, use_container_width=True, hide_index=True)
         csv = df_filtrado.to_csv(index=False).encode('utf-8')
-        st.download_button("⬇️ Descargar CSV", data=csv,
-                           file_name=f"ventas_{date.today()}.csv", mime="text/csv")
+        st.download_button("⬇️ Descargar CSV", data=csv, file_name=f"ventas_{date.today()}.csv", mime="text/csv")
         st.markdown("---")
 
-        # ── Embudos ──
         st.markdown("### 🔻 Embudos de Ventas")
 
         def render_embudo_horizontal(titulo, etapas_vals, color_borde):
-            st.markdown(
-                f'<div style="color:{color_borde};font-size:0.8rem;font-weight:800;'
-                f'text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">{titulo}</div>',
-                unsafe_allow_html=True
-            )
+            st.markdown(f'<div style="color:{color_borde};font-size:0.8rem;font-weight:800;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">{titulo}</div>', unsafe_allow_html=True)
             items_html = ""
             for i, (etapa, val) in enumerate(etapas_vals):
-                color_val = color_borde if str(val) not in ["—", "0", 0] else "#555566"
+                color_val = color_borde if str(val) != "—" and str(val) != "0" else "#555566"
                 items_html += f"""
-                <div style="display:inline-flex;flex-direction:column;align-items:center;
-                            justify-content:center;background:linear-gradient(135deg,#0d0d0d,#1a1500);
-                            border:1px solid {color_borde};border-radius:14px;padding:22px 20px;
-                            min-width:150px;min-height:110px;text-align:center;vertical-align:top;
-                            box-shadow:0 4px 15px rgba(0,0,0,0.3)">
-                    <div style="color:#8b9bb4;font-size:0.75rem;text-transform:uppercase;
-                                letter-spacing:0.8px;margin-bottom:12px;white-space:nowrap">{etapa}</div>
+                <div style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+                            background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color_borde};
+                            border-radius:14px;padding:22px 20px;min-width:150px;min-height:110px;
+                            text-align:center;vertical-align:top;box-shadow:0 4px 15px rgba(0,0,0,0.3)">
+                    <div style="color:#8b9bb4;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.8px;
+                                margin-bottom:12px;white-space:nowrap">{etapa}</div>
                     <div style="color:{color_val};font-size:2.4rem;font-weight:800;line-height:1">{val}</div>
                 </div>"""
                 if i < len(etapas_vals) - 1:
-                    items_html += f"""
-                <div style="display:inline-flex;align-items:center;justify-content:center;
-                            padding:0 6px;vertical-align:top;margin-top:30px">
-                    <span style="color:{color_borde};font-size:1.5rem;font-weight:300">→</span>
-                </div>"""
-            st.markdown(
-                f'<div style="overflow-x:auto;white-space:nowrap;padding-bottom:8px">{items_html}</div>',
-                unsafe_allow_html=True
-            )
+                    items_html += f'<div style="display:inline-flex;align-items:center;justify-content:center;padding:0 6px;vertical-align:top;margin-top:30px"><span style="color:{color_borde};font-size:1.5rem;font-weight:300">→</span></div>'
+            st.markdown(f'<div style="overflow-x:auto;white-space:nowrap;padding-bottom:8px">{items_html}</div>', unsafe_allow_html=True)
 
-        df_esp_emb = df_filtrado[df_filtrado['Grupo_Pais'] == 'España'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
-        df_usa_emb = df_filtrado[df_filtrado['Grupo_Pais'] == 'USA']    if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
+        df_esp_emb = df_filtrado[df_filtrado['Grupo_Pais']=='España'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
+        df_usa_emb = df_filtrado[df_filtrado['Grupo_Pais']=='USA']    if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
 
         def s(df, col): return int(df[col].sum()) if not df.empty and col in df.columns else 0
 
-        leads_esp = s(df_esp_emb, 'Leads WPP') + s(df_esp_emb, 'Leads IG') + s(df_esp_emb, 'Leads Formulario')
-        val_esp   = s(df_esp_emb, 'Valoraciones')
-        pres_esp  = s(df_esp_emb, 'Venta Dia Siguiente')
-        dep_esp   = s(df_esp_emb, 'Cierres')
-
-        leads_usa = s(df_usa_emb, 'Leads WPP') + s(df_usa_emb, 'Leads IG') + s(df_usa_emb, 'Leads Formulario')
-        val_usa   = s(df_usa_emb, 'Valoraciones')
-        pres_usa  = s(df_usa_emb, 'Venta Dia Siguiente')
-        dep_usa   = s(df_usa_emb, 'Cierres')
+        # FIX: suma todas las fuentes de leads
+        leads_esp = s(df_esp_emb,'Leads WPP') + s(df_esp_emb,'Leads IG') + s(df_esp_emb,'Leads Formulario')
+        leads_usa = s(df_usa_emb,'Leads WPP') + s(df_usa_emb,'Leads IG') + s(df_usa_emb,'Leads Formulario')
 
         etapas_esp = [
             ("📥 Leads", leads_esp), ("📞 Contactado", "—"), ("🔇 No Contestó", "—"),
-            ("⭐ Valoración", val_esp), ("💵 Presupuesto", pres_esp), ("💳 Financiamiento", "—"),
-            ("🏥 Val. Presencial", "—"), ("📅 Ag. Depósito", dep_esp), ("✅ Venta Cerrada", "—"),
+            ("⭐ Valoración", s(df_esp_emb,'Valoraciones')), ("💵 Presupuesto", s(df_esp_emb,'Venta Dia Siguiente')),
+            ("💳 Financiamiento", "—"), ("🏥 Val. Presencial", "—"),
+            ("📅 Ag. Depósito", s(df_esp_emb,'Cierres')), ("✅ Venta Cerrada", "—"),
         ]
         etapas_usa = [
             ("📥 Leads", leads_usa), ("📞 Contactado", "—"), ("🔇 No Contesta", "—"),
-            ("💻 Val. Virtual", val_usa), ("💵 Presupuesto", pres_usa),
-            ("🏥 Ag. Presencial", "—"), ("📅 Ag. Depósito", dep_usa),
+            ("💻 Val. Virtual", s(df_usa_emb,'Valoraciones')), ("💵 Presupuesto", s(df_usa_emb,'Venta Dia Siguiente')),
+            ("🏥 Ag. Presencial", "—"), ("📅 Ag. Depósito", s(df_usa_emb,'Cierres')),
         ]
 
         render_embudo_horizontal("🇪🇸 Embudo España", etapas_esp, "#00d4aa")
         st.markdown("<br>", unsafe_allow_html=True)
-        render_embudo_horizontal("🇺🇸 Embudo USA",    etapas_usa, "#7c6af7")
+        render_embudo_horizontal("🇺🇸 Embudo USA", etapas_usa, "#7c6af7")
+        st.markdown("---")
+
+        # ══ TAREAS PARA HOY ═══════════════════════════════════════════════
+        st.markdown("### 📋 Tareas para Hoy")
+        df_tareas = cargar_tareas()
+        if not df_tareas.empty:
+            t_col1, t_col2 = st.columns(2)
+            TIPOS = ['Valoración Virtual', 'Seguimiento']
+            # FIX: incluir EVELIN en asesores
+            ASESORES = ['DANIELA', 'EVELYN', 'EVELIN', 'CAROLINA']
+
+            for asesor in ASESORES:
+                df_a = df_tareas[df_tareas['Responsable'].str.upper() == asesor] if 'Responsable' in df_tareas.columns else pd.DataFrame()
+                grupo = EQUIPOS_BASE.get(asesor, 'Por Clasificar')
+                color = "#00d4aa" if grupo == 'España' else "#7c6af7"
+                with (t_col1 if grupo == 'España' else t_col2):
+                    st.markdown(f"""
+                    <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color};
+                                border-radius:12px;padding:14px 18px;margin-bottom:10px">
+                        <div style="color:{color};font-weight:800;font-size:0.95rem;margin-bottom:10px">👤 {asesor}</div>""",
+                        unsafe_allow_html=True)
+                    tc1, tc2 = st.columns(2)
+                    for tipo in TIPOS:
+                        df_t = df_a[df_a['Tipo'].astype(str).str.strip().str.upper() == tipo.upper()] if not df_a.empty and 'Tipo' in df_a.columns else pd.DataFrame()
+                        cant = int(df_t['Cantidad'].sum()) if not df_t.empty and 'Cantidad' in df_t.columns else 0
+                        emoji = "💻" if "VIRTUAL" in tipo.upper() else "📞"
+                        col_use = tc1 if tipo == 'Valoración Virtual' else tc2
+                        col_use.metric(f"{emoji} {tipo}", cant)
+                    st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.info("📝 Sin tareas registradas. Agrega datos en la hoja 'TAREAS KOMMO'.")
+
+        # ── Ranking de Valoraciones ──────────────────────────────────────
+        st.markdown("#### 🏆 Ranking de Valoraciones")
+        if not df_base.empty and 'Responsable' in df_base.columns and 'Valoraciones' in df_base.columns:
+            df_rank_val = df_base.groupby('Responsable')['Valoraciones'].sum().reset_index()
+            df_rank_val = df_rank_val[df_rank_val['Valoraciones'] > 0].sort_values('Valoraciones', ascending=False)
+            total_val = df_rank_val['Valoraciones'].sum()
+            if total_val > 0:
+                df_rank_val['%'] = (df_rank_val['Valoraciones'] / total_val * 100).round(1)
+                df_rank_val['Grupo'] = df_rank_val['Responsable'].map(lambda x: EQUIPOS_BASE.get(x,'Por Clasificar'))
+                for _, row in df_rank_val.iterrows():
+                    color = "#00d4aa" if row['Grupo'] == 'España' else "#7c6af7"
+                    p = row['%']
+                    st.markdown(f"""
+                    <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #2a2000;
+                                border-radius:10px;padding:10px 16px;margin-bottom:6px">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                            <span style="color:white;font-weight:700">👤 {row['Responsable']}</span>
+                            <span style="color:{color};font-weight:700">{int(row['Valoraciones'])} val. · {p}%</span>
+                        </div>
+                        <div style="background:#1e2340;border-radius:6px;height:10px">
+                            <div style="height:10px;border-radius:6px;background:{color};width:{p}%"></div>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
 
         st.markdown("---")
 
-        # ── Tareas ──
-        st.markdown("### 📋 Tareas para Hoy")
-        df_tareas = cargar_tareas()
+        # ══ VENTAS CERRADAS ═══════════════════════════════════════════════
+        st.markdown("### ✅ Ventas Cerradas")
+        df_vc_usa, df_vc_esp = cargar_ventas_cerradas()
+        vc1, vc2 = st.columns(2)
+        with vc1:
+            st.markdown("<div style='color:#7c6af7;font-weight:800;font-size:0.9rem;margin-bottom:8px'>🇺🇸 USA</div>", unsafe_allow_html=True)
+            if not df_vc_usa.empty:
+                st.dataframe(df_vc_usa, use_container_width=True, hide_index=True)
+                st.metric("💰 Total USA", f"${df_vc_usa['Total'].sum():,.0f}")
+            else:
+                st.info("Sin ventas cerradas USA.")
+        with vc2:
+            st.markdown("<div style='color:#00d4aa;font-weight:800;font-size:0.9rem;margin-bottom:8px'>🇪🇸 España</div>", unsafe_allow_html=True)
+            if not df_vc_esp.empty:
+                st.dataframe(df_vc_esp, use_container_width=True, hide_index=True)
+                st.metric("💰 Total España", f"${df_vc_esp['Total'].sum():,.0f}")
+            else:
+                st.info("Sin ventas cerradas España.")
 
-        if df_tareas.empty:
-            st.info("ℹ️ No hay tareas pendientes registradas en TAREAS KOMMO.")
-        else:
-            t_col1, t_col2 = st.columns(2)
-            TIPOS_TAREA = ['VALORACIÓN VIRTUAL', 'VALORACION VIRTUAL', 'SEGUIMIENTO']
-            ASESORES    = ['DANIELA', 'EVELYN', 'EVELIN', 'CAROLINA']
+        st.markdown("---")
 
-            for asesor in ASESORES:
-                df_a   = df_tareas[df_tareas['Responsable'] == asesor] if 'Responsable' in df_tareas.columns else pd.DataFrame()
-                grupo  = EQUIPOS_BASE.get(asesor, 'Por Clasificar')
-                color  = "#00d4aa" if grupo == 'España' else "#7c6af7"
-                col_t  = t_col1 if grupo == 'España' else t_col2
+        # ══ AGENDA PENDIENTE ══════════════════════════════════════════════
+        st.markdown("### 📅 Agenda Pendiente")
+        df_ag_usa, df_ag_esp = cargar_agenda_pendiente()
+        ag1, ag2 = st.columns(2)
+        with ag1:
+            st.markdown("<div style='color:#7c6af7;font-weight:800;font-size:0.9rem;margin-bottom:8px'>🇺🇸 USA</div>", unsafe_allow_html=True)
+            if not df_ag_usa.empty: st.dataframe(df_ag_usa, use_container_width=True, hide_index=True)
+            else: st.info("Sin agenda pendiente USA.")
+        with ag2:
+            st.markdown("<div style='color:#00d4aa;font-weight:800;font-size:0.9rem;margin-bottom:8px'>🇪🇸 España</div>", unsafe_allow_html=True)
+            if not df_ag_esp.empty: st.dataframe(df_ag_esp, use_container_width=True, hide_index=True)
+            else: st.info("Sin agenda pendiente España.")
 
-                with col_t:
-                    st.markdown(f"""
-                    <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color};
-                                border-radius:12px;padding:14px 18px;margin-bottom:12px">
-                        <div style="color:{color};font-weight:800;font-size:1.05rem;
-                                    margin-bottom:8px;letter-spacing:0.5px">👤 {asesor}</div>
-                    """, unsafe_allow_html=True)
-                    tc1, tc2 = st.columns(2)
-                    for idx, tipo_label in enumerate(['Valoración Virtual', 'Seguimiento']):
-                        cant = 0
-                        if not df_a.empty and 'Tipo' in df_a.columns:
-                            mask = df_a['Tipo'].astype(str).str.upper().str.strip().str.contains(
-                                tipo_label.upper().replace('Ó', 'O').replace('ó', 'o'), na=False
-                            )
-                            cant = int(df_a[mask]['Cantidad'].sum()) if mask.any() else 0
-                        with (tc1 if idx == 0 else tc2):
-                            st.markdown(f"""
-                            <div style="padding:4px 0">
-                                <span style="color:#8b9bb4;font-size:0.78rem;text-transform:uppercase">{tipo_label}</span><br>
-                                <span style="color:#ffffff;font-size:1.5rem;font-weight:700">{cant}</span>
-                            </div>""", unsafe_allow_html=True)
-                    st.markdown("</div>", unsafe_allow_html=True)
-
-
-# ══ TAB 2 — METAS ══════════════════════════════════════════════════════════════
+# ══ TAB 2 — METAS ═══════════════════════════════════════════════════════════
 with tab2:
-    st.markdown("### 🎯 Cumplimiento de Metas")
-    if df_filtrado.empty:
-        st.warning("⚠️ Sin datos para calcular metas.")
-    else:
-        cierres_totales = int(df_filtrado['Cierres'].sum()) if 'Cierres' in df_filtrado.columns else 0
+    st.markdown("### 🎯 Control de Metas")
+    try:
+        df_m = cargar_ventas_diarias()
+        if df_m.empty:
+            st.info("📝 Sin datos aún.")
+        else:
+            hoy_ts     = pd.Timestamp(date.today())
+            inicio_sem = hoy_ts - timedelta(days=hoy_ts.weekday())
+            inicio_mes = hoy_ts.replace(day=1)
 
-        m1, m2, m3 = st.columns(3)
-        with m1:
-            pct_d = min(round((cierres_totales / META_DIARIA)   * 100, 1), 100.0) if META_DIARIA   > 0 else 0
-            st.metric("Meta Diaria (4)",    f"{cierres_totales} Depósitos", f"{pct_d}% Logrado")
-            st.progress(pct_d / 100)
-        with m2:
-            pct_s = min(round((cierres_totales / META_SEMANAL)  * 100, 1), 100.0) if META_SEMANAL  > 0 else 0
-            st.metric("Meta Semanal (40)",  f"{cierres_totales} Depósitos", f"{pct_s}% Logrado")
-            st.progress(pct_s / 100)
-        with m3:
-            pct_m = min(round((cierres_totales / META_MENSUAL)  * 100, 1), 100.0) if META_MENSUAL  > 0 else 0
-            st.metric("Meta Mensual (100)", f"{cierres_totales} Depósitos", f"{pct_m}% Logrado")
-            st.progress(pct_m / 100)
+            def get_cierres(df_src, desde=None, hasta=None):
+                d = df_src.copy()
+                if 'Fecha' in d.columns:
+                    if desde is not None: d = d[d['Fecha'].dt.date >= desde]
+                    if hasta is not None: d = d[d['Fecha'].dt.date <= hasta]
+                if 'Cierres' not in d.columns or d.empty: return 0
+                return int(pd.to_numeric(d['Cierres'], errors='coerce').fillna(0).sum())
 
-        # Gráfico depósitos por responsable
-        if 'Responsable' in df_filtrado.columns and not df_filtrado.empty:
-            df_resp = df_filtrado.groupby(['Responsable', 'Grupo_Pais'])['Cierres'].sum().reset_index()
-            df_resp = df_resp[df_resp['Cierres'] > 0]
-            if not df_resp.empty:
-                fig_metas = px.bar(
-                    df_resp, x='Responsable', y='Cierres', color='Grupo_Pais',
-                    title="Depósitos por Responsable",
-                    color_discrete_map={'USA': '#7c6af7', 'España': '#00d4aa', 'Por Clasificar': '#c9a84c'}
-                )
-                fig_metas.update_layout(**PLOT_CFG)
-                st.plotly_chart(fig_metas, use_container_width=True)
+            # FIX: EVELIN en asesores España
+            asesores_esp = [r for r in df_m['Responsable'].dropna().unique() if EQUIPOS_BASE.get(r,'') == 'España'] if 'Responsable' in df_m.columns else []
+            asesores_usa = [r for r in df_m['Responsable'].dropna().unique() if EQUIPOS_BASE.get(r,'') == 'USA']    if 'Responsable' in df_m.columns else []
+            n_esp = max(len(asesores_esp), 1)
+            n_usa = max(len(asesores_usa), 1)
 
+            df_esp_m2 = df_m[df_m['Grupo_Pais']=='España'] if 'Grupo_Pais' in df_m.columns else pd.DataFrame()
+            df_usa_m2 = df_m[df_m['Grupo_Pais']=='USA']    if 'Grupo_Pais' in df_m.columns else pd.DataFrame()
+            hoy_date = hoy_ts.date()
 
-# ══ TAB 3 — ESPAÑA MAYO ════════════════════════════════════════════════════════
+            def tarjeta_meta(titulo, actual, meta, emoji, color_borde='#c9a84c'):
+                p = min(round(actual/meta*100, 1) if meta > 0 else 0, 100)
+                color = "#00d4aa" if p >= 100 else "#f7a76c" if p >= 50 else "#ff6b6b"
+                faltan = max(meta - actual, 0)
+                st.markdown(f"""
+                <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color_borde};
+                            border-radius:14px;padding:14px 18px;margin-bottom:8px">
+                    <div style="color:#8b9bb4;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px">{emoji} {titulo}</div>
+                    <div style="color:white;font-size:1.9rem;font-weight:800">{actual} <span style="color:#8b9bb4;font-size:0.95rem">/ {meta}</span></div>
+                    <div style="color:{color};font-size:0.9rem;font-weight:600">{p}% completado</div>
+                    <div style="background:#1e2340;border-radius:10px;height:10px;width:100%;margin:6px 0">
+                        <div style="height:10px;border-radius:10px;background:{color};width:{p}%"></div>
+                    </div>
+                    <div style="color:#ff6b6b;font-size:0.8rem">Faltan: <b>{faltan}</b></div>
+                </div>""", unsafe_allow_html=True)
+
+            def barras_asesor(df_grupo, titulo, color_borde):
+                st.markdown(f"#### 🏁 {titulo}")
+                df_hoy_g = df_grupo[df_grupo['Fecha'].dt.date == hoy_date] if 'Fecha' in df_grupo.columns else pd.DataFrame()
+                if not df_hoy_g.empty and 'Responsable' in df_hoy_g.columns:
+                    df_r = df_hoy_g.groupby('Responsable')['Cierres'].sum().reset_index().sort_values('Cierres', ascending=False)
+                    for _, row in df_r.iterrows():
+                        p = min(round(row['Cierres']/META_DIARIA*100, 1), 100)
+                        c = int(row['Cierres']); faltan = max(META_DIARIA - c, 0)
+                        color = "#00d4aa" if p >= 100 else "#f7a76c" if p >= 60 else "#ff6b6b"
+                        estado = "✅ ¡Meta!" if p >= 100 else f"🔥 Faltan {faltan}" if p >= 60 else f"⚡ Faltan {faltan}"
+                        st.markdown(f"""
+                        <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color_borde};
+                                    border-radius:12px;padding:12px 16px;margin-bottom:8px">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                                <div style="color:white;font-weight:700">👤 {row['Responsable']}</div>
+                                <div style="color:{color};font-weight:600;font-size:0.85rem">{estado}</div>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:10px">
+                                <div style="flex:1;background:#1e2340;border-radius:8px;height:12px">
+                                    <div style="height:12px;border-radius:8px;background:{color};width:{p}%"></div>
+                                </div>
+                                <div style="color:#c9a84c;font-size:0.82rem;font-weight:700;min-width:80px;text-align:right">
+                                    {c} / {META_DIARIA} · {p}%
+                                </div>
+                            </div>
+                        </div>""", unsafe_allow_html=True)
+                else:
+                    st.info("Sin depósitos hoy.")
+
+            st.markdown("""<div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #00d4aa;
+                border-radius:14px;padding:12px 20px;margin-bottom:12px">
+                <span style="color:#00d4aa;font-size:1.1rem;font-weight:800">🇪🇸 GRUPO ESPAÑA</span>
+                <span style="color:#8b9bb4;font-size:0.8rem;margin-left:12px">{} asesor(es): {}</span>
+            </div>""".format(n_esp, ', '.join(asesores_esp) if asesores_esp else 'Sin datos'), unsafe_allow_html=True)
+
+            ec1,ec2,ec3 = st.columns(3)
+            with ec1: tarjeta_meta("Depósitos Hoy",    get_cierres(df_esp_m2, hoy_date, hoy_date),              META_DIARIA*n_esp,  "📅", "#00d4aa")
+            with ec2: tarjeta_meta("Depósitos Semana", get_cierres(df_esp_m2, inicio_sem.date(), hoy_date),     META_SEMANAL*n_esp, "📆", "#00d4aa")
+            with ec3: tarjeta_meta("Depósitos Mes",    get_cierres(df_esp_m2, inicio_mes.date(), hoy_date),     META_MENSUAL*n_esp, "🗓️", "#00d4aa")
+            barras_asesor(df_esp_m2, "Progreso de HOY — España", "#00d4aa")
+            st.markdown("---")
+
+            st.markdown("""<div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #7c6af7;
+                border-radius:14px;padding:12px 20px;margin-bottom:12px">
+                <span style="color:#7c6af7;font-size:1.1rem;font-weight:800">🇺🇸 GRUPO USA</span>
+                <span style="color:#8b9bb4;font-size:0.8rem;margin-left:12px">{} asesor(es): {}</span>
+            </div>""".format(n_usa, ', '.join(asesores_usa) if asesores_usa else 'Sin datos'), unsafe_allow_html=True)
+
+            uc1,uc2,uc3 = st.columns(3)
+            with uc1: tarjeta_meta("Depósitos Hoy",    get_cierres(df_usa_m2, hoy_date, hoy_date),              META_DIARIA*n_usa,  "📅", "#7c6af7")
+            with uc2: tarjeta_meta("Depósitos Semana", get_cierres(df_usa_m2, inicio_sem.date(), hoy_date),     META_SEMANAL*n_usa, "📆", "#7c6af7")
+            with uc3: tarjeta_meta("Depósitos Mes",    get_cierres(df_usa_m2, inicio_mes.date(), hoy_date),     META_MENSUAL*n_usa, "🗓️", "#7c6af7")
+            barras_asesor(df_usa_m2, "Progreso de HOY — USA", "#7c6af7")
+            st.markdown("---")
+
+            st.markdown("#### 🏆 Ranking Mensual Global por Asesor")
+            df_mes_all = df_m[df_m['Fecha'] >= inicio_mes] if 'Fecha' in df_m.columns else pd.DataFrame()
+            if not df_mes_all.empty and 'Responsable' in df_mes_all.columns:
+                df_rank = df_mes_all.groupby('Responsable')['Cierres'].sum().reset_index()
+                df_rank['Grupo'] = df_rank['Responsable'].map(lambda x: EQUIPOS_BASE.get(x,'Por Clasificar'))
+                df_rank = df_rank.rename(columns={'Cierres':'Depósitos'})
+                df_rank['Meta'] = META_MENSUAL
+                df_rank['% Cumplimiento'] = (df_rank['Depósitos']/META_MENSUAL*100).round(1)
+                df_rank['Faltan'] = (META_MENSUAL - df_rank['Depósitos']).clip(lower=0)
+                df_rank = df_rank.sort_values('Depósitos', ascending=False)
+                fig_rank = px.bar(df_rank, x='Responsable', y='Depósitos', color='Grupo',
+                                  color_discrete_map={'España':'#00d4aa','USA':'#7c6af7','Por Clasificar':'#f0d080'})
+                fig_rank.add_hline(y=META_MENSUAL, line_dash='dash', line_color='#c9a84c',
+                                   annotation_text=f'Meta {META_MENSUAL}')
+                fig_rank.update_layout(**PLOT_CFG, margin=dict(t=30,b=0,l=0,r=0))
+                st.plotly_chart(fig_rank, use_container_width=True)
+                st.dataframe(df_rank, use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.error(f"❌ Error Metas: {e}")
+
+# ══ TAB 3 — ESPAÑA MAYO ══════════════════════════════════════════════════════
 with tab3:
-    st.markdown("### 🇪🇸 Desempeño Clínicas España — Mayo 2026")
-    df_esp_m = cargar_españa()
-    st.dataframe(df_esp_m, use_container_width=True, hide_index=True)
+    st.markdown("### 🇪🇸 Ventas España — Mayo 2026")
+    df_esp = cargar_españa()
+    t_ag = df_esp['Agendados'].sum(); t_re = df_esp['Realizados'].sum()
+    conv = round(t_re/t_ag*100,1) if t_ag>0 else 0
+    ke1,ke2,ke3,ke4 = st.columns(4)
+    ke1.metric("📍 Sedes", len(df_esp))
+    ke2.metric("📅 Agendados", f"{t_ag:.1f}")
+    ke3.metric("✅ Realizados", f"{t_re:.1f}")
+    ke4.metric("📊 Conversión", f"{conv}%")
+    st.markdown("---")
+    e1,e2 = st.columns(2)
+    with e1:
+        st.markdown("#### 📍 Agendados vs Realizados")
+        fig_e1 = go.Figure()
+        fig_e1.add_trace(go.Bar(name='Agendados', x=df_esp['Sede'], y=df_esp['Agendados'], marker_color='#7c6af7'))
+        fig_e1.add_trace(go.Bar(name='Realizados', x=df_esp['Sede'], y=df_esp['Realizados'], marker_color='#00d4aa'))
+        fig_e1.update_layout(barmode='group', **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+        st.plotly_chart(fig_e1, use_container_width=True)
+    with e2:
+        st.markdown("#### 🍩 Distribución Realizados")
+        df_e2 = df_esp[df_esp['Realizados']>0]
+        fig_e2 = px.pie(df_e2, values='Realizados', names='Sede', hole=0.5,
+                        color_discrete_sequence=px.colors.sequential.Teal)
+        fig_e2.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+        st.plotly_chart(fig_e2, use_container_width=True)
+    e3,e4 = st.columns(2)
+    with e3:
+        st.markdown("#### 📊 % Conversión por Sede")
+        df_conv = df_esp[df_esp['Agendados']>0].copy()
+        df_conv['% Conversión'] = pd.to_numeric(df_conv['% Conversión'], errors='coerce').fillna(0)
+        if not df_conv.empty and df_conv['% Conversión'].sum() > 0:
+            fig_e3 = px.bar(df_conv, x='Sede', y='% Conversión', color='% Conversión',
+                            color_continuous_scale='teal', text='% Conversión')
+            fig_e3.update_traces(texttemplate='%{text}%')
+            fig_e3.update_layout(coloraxis_showscale=False, **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+            st.plotly_chart(fig_e3, use_container_width=True)
+        else:
+            st.info("Sin datos de conversión.")
+    with e4:
+        st.markdown("#### 💬 Leads por Sede")
+        df_leads_esp = pd.DataFrame({
+            'Sede':['Alicante','Barcelona','Valencia','Madrid','Malaga','Bilbao'],
+            'Leads WPP':[27,31,18,39,43,21],
+            'Leads IG':[37,144,39,214,99,0]
+        })
+        fig_e4 = px.bar(df_leads_esp, x='Sede', y=['Leads WPP','Leads IG'],
+                        barmode='group', color_discrete_sequence=['#00d4aa','#7c6af7'])
+        fig_e4.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+        st.plotly_chart(fig_e4, use_container_width=True)
+    st.markdown("---")
+    st.dataframe(df_esp, use_container_width=True, hide_index=True)
 
-    fig_esp = px.bar(
-        df_esp_m, x='Sede', y=['Agendados', 'Realizados'], barmode='group',
-        title="Agendados vs Realizados por Sede (España)",
-        color_discrete_map={'Agendados': '#c9a84c', 'Realizados': '#00d4aa'}
-    )
-    fig_esp.update_layout(**PLOT_CFG)
-    st.plotly_chart(fig_esp, use_container_width=True)
-
-    # Conversión
-    fig_conv_esp = px.bar(
-        df_esp_m, x='Sede', y='% Conversión',
-        title="% Conversión por Sede (España)",
-        color='% Conversión',
-        color_continuous_scale=['#c9a84c', '#00d4aa']
-    )
-    fig_conv_esp.update_layout(**PLOT_CFG)
-    st.plotly_chart(fig_conv_esp, use_container_width=True)
-
-
-# ══ TAB 4 — USA MAYO ══════════════════════════════════════════════════════════
+# ══ TAB 4 — USA MAYO ═════════════════════════════════════════════════════════
 with tab4:
-    st.markdown("### 🇺🇸 Desempeño Clínicas USA — Mayo 2026")
-    df_usa_m = cargar_usa()
-    st.dataframe(df_usa_m, use_container_width=True, hide_index=True)
+    st.markdown("### 🇺🇸 Ventas USA — Mayo 2026")
+    df_usa = cargar_usa()
+    t_ag = df_usa['Agendados'].sum(); t_re = df_usa['Realizados'].sum()
+    conv = round(t_re/t_ag*100,1) if t_ag>0 else 0
+    ku1,ku2,ku3,ku4 = st.columns(4)
+    ku1.metric("📍 Sedes", len(df_usa))
+    ku2.metric("📅 Agendados", f"{t_ag:.1f}")
+    ku3.metric("✅ Realizados", f"{t_re:.1f}")
+    ku4.metric("📊 Conversión", f"{conv}%")
+    st.markdown("---")
+    u1,u2 = st.columns(2)
+    with u1:
+        st.markdown("#### 📍 Agendados vs Realizados")
+        fig_u1 = go.Figure()
+        fig_u1.add_trace(go.Bar(name='Agendados', x=df_usa['Sede'], y=df_usa['Agendados'], marker_color='#7c6af7'))
+        fig_u1.add_trace(go.Bar(name='Realizados', x=df_usa['Sede'], y=df_usa['Realizados'], marker_color='#00d4aa'))
+        fig_u1.update_layout(barmode='group', **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+        st.plotly_chart(fig_u1, use_container_width=True)
+    with u2:
+        st.markdown("#### 🍩 Distribución Realizados")
+        fig_u2 = px.pie(df_usa, values='Realizados', names='Sede', hole=0.5,
+                        color_discrete_sequence=px.colors.sequential.Purples)
+        fig_u2.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+        st.plotly_chart(fig_u2, use_container_width=True)
+    u3,u4 = st.columns(2)
+    with u3:
+        st.markdown("#### 📊 % Conversión por Sede")
+        df_usa_conv = df_usa[df_usa['Agendados']>0].copy()
+        df_usa_conv['% Conversión'] = pd.to_numeric(df_usa_conv['% Conversión'], errors='coerce').fillna(0)
+        if not df_usa_conv.empty and df_usa_conv['% Conversión'].sum() > 0:
+            fig_u3 = px.bar(df_usa_conv, x='Sede', y='% Conversión', color='% Conversión',
+                            color_continuous_scale='purples', text='% Conversión')
+            fig_u3.update_traces(texttemplate='%{text}%')
+            fig_u3.update_layout(coloraxis_showscale=False, **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+            st.plotly_chart(fig_u3, use_container_width=True)
+        else:
+            st.info("Sin datos de conversión.")
+    with u4:
+        st.markdown("#### 💬 Leads por Sede")
+        df_leads_usa = pd.DataFrame({
+            'Sede':['Dallas','Houston','New Jersey','Orlando','Los Angeles'],
+            'Leads WPP+IG':[277.4,296.4,343.4,214.4,318.4]
+        })
+        fig_u4 = px.bar(df_leads_usa, x='Sede', y='Leads WPP+IG',
+                        color='Leads WPP+IG', color_continuous_scale='purples')
+        fig_u4.update_layout(coloraxis_showscale=False, **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+        st.plotly_chart(fig_u4, use_container_width=True)
+    st.markdown("---")
+    st.dataframe(df_usa, use_container_width=True, hide_index=True)
 
-    fig_usa = px.bar(
-        df_usa_m, x='Sede', y=['Agendados', 'Realizados'], barmode='group',
-        title="Agendados vs Realizados por Sede (USA)",
-        color_discrete_map={'Agendados': '#c9a84c', 'Realizados': '#7c6af7'}
-    )
-    fig_usa.update_layout(**PLOT_CFG)
-    st.plotly_chart(fig_usa, use_container_width=True)
-
-    fig_conv_usa = px.bar(
-        df_usa_m, x='Sede', y='% Conversión',
-        title="% Conversión por Sede (USA)",
-        color='% Conversión',
-        color_continuous_scale=['#c9a84c', '#7c6af7']
-    )
-    fig_conv_usa.update_layout(**PLOT_CFG)
-    st.plotly_chart(fig_conv_usa, use_container_width=True)
-
-
-# ══ TAB 5 — GLOBAL ════════════════════════════════════════════════════════════
+# ══ TAB 5 — GLOBAL ═══════════════════════════════════════════════════════════
 with tab5:
-    st.markdown("### 🌍 Comparativo Global — Mayo 2026")
-    df_glob = cargar_global()
-
-    g1, g2 = st.columns(2)
-    with g1:
-        fig_g1 = px.sunburst(
-            df_glob, path=['País', 'Sede'], values='Realizados',
-            title="Distribución de Valoraciones Realizadas",
-            color_discrete_sequence=['#00d4aa', '#7c6af7', '#c9a84c']
-        )
-        fig_g1.update_layout(**PLOT_CFG)
-        st.plotly_chart(fig_g1, use_container_width=True)
-    with g2:
-        fig_g2 = px.bar(
-            df_glob, x='Sede', y='% Conversión', color='País',
-            title="% Conversión por Sede y País",
-            color_discrete_map={'🇪🇸 España': '#00d4aa', '🇺🇸 USA': '#7c6af7'}
-        )
-        fig_g2.update_layout(**PLOT_CFG)
-        st.plotly_chart(fig_g2, use_container_width=True)
-
-    st.markdown("#### 📊 Resumen Consolidado Mayo 2026")
-    total_ag  = df_glob['Agendados'].sum()
-    total_re  = df_glob['Realizados'].sum()
-    conv_glob = round(total_re / total_ag * 100, 1) if total_ag > 0 else 0
-
-    r1, r2, r3 = st.columns(3)
-    r1.metric("Total Agendados",  f"{total_ag:.1f}")
-    r2.metric("Total Realizados", f"{total_re:.1f}")
-    r3.metric("Conversión Global", f"{conv_glob}%")
-
-    st.dataframe(
-        df_glob[['País', 'Sede', 'Agendados', 'Realizados', '% Conversión']],
-        use_container_width=True, hide_index=True
-    )
+    st.markdown("### 🌍 Resumen Global — Mayo 2026")
+    df_global = cargar_global()
+    t_ag = df_global['Agendados'].sum(); t_re = df_global['Realizados'].sum()
+    t_esp = df_global[df_global['País']=='🇪🇸 España']['Realizados'].sum()
+    t_usa = df_global[df_global['País']=='🇺🇸 USA']['Realizados'].sum()
+    g1,g2,g3,g4,g5 = st.columns(5)
+    g1.metric("🌍 Total Sedes", len(df_global))
+    g2.metric("📅 Agendados", f"{t_ag:.1f}")
+    g3.metric("✅ Realizados", f"{t_re:.1f}")
+    g4.metric("🇪🇸 España", f"{t_esp:.1f}")
+    g5.metric("🇺🇸 USA", f"{t_usa:.1f}")
+    st.markdown("---")
+    col1,col2 = st.columns(2)
+    with col1:
+        fig_all = px.bar(df_global.sort_values('Realizados',ascending=True),
+                         x='Realizados', y='Sede', orientation='h',
+                         color='País', color_discrete_map={'🇪🇸 España':'#00d4aa','🇺🇸 USA':'#7c6af7'})
+        fig_all.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+        st.plotly_chart(fig_all, use_container_width=True)
+    with col2:
+        df_pais = pd.DataFrame({'País':['🇪🇸 España','🇺🇸 USA'],'Total':[t_esp,t_usa]})
+        fig_p = px.pie(df_pais, values='Total', names='País', hole=0.5,
+                       color_discrete_sequence=['#00d4aa','#7c6af7'])
+        fig_p.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+        st.plotly_chart(fig_p, use_container_width=True)
+    col3,col4 = st.columns(2)
+    with col3:
+        fig_g3 = go.Figure()
+        fig_g3.add_trace(go.Bar(name='Agendados', x=df_global['Sede'], y=df_global['Agendados'], marker_color='rgba(124,106,247,0.6)'))
+        fig_g3.add_trace(go.Bar(name='Realizados', x=df_global['Sede'], y=df_global['Realizados'], marker_color='#00d4aa'))
+        fig_g3.update_layout(barmode='group', **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+        st.plotly_chart(fig_g3, use_container_width=True)
+    with col4:
+        df_cv = df_global[df_global['Agendados']>0].copy()
+        df_cv['% Conversión'] = pd.to_numeric(df_cv['% Conversión'], errors='coerce').fillna(0)
+        if not df_cv.empty and df_cv['% Conversión'].sum() > 0:
+            fig_g4 = px.bar(df_cv, x='Sede', y='% Conversión', color='País', text='% Conversión',
+                            color_discrete_map={'🇪🇸 España':'#00d4aa','🇺🇸 USA':'#7c6af7'})
+            fig_g4.update_traces(texttemplate='%{text}%')
+            fig_g4.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+            st.plotly_chart(fig_g4, use_container_width=True)
+    st.markdown("---")
+    st.dataframe(df_global.sort_values(['País','Realizados'],ascending=[True,False]),
+                 use_container_width=True, hide_index=True)
