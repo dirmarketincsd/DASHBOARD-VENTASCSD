@@ -371,34 +371,98 @@ with tab1:
         st.download_button("⬇️ Descargar CSV", data=csv, file_name=f"ventas_{date.today()}.csv", mime="text/csv")
         st.markdown("---")
 
-        if 'Responsable' in df_filtrado.columns:
-            g1, g2 = st.columns(2)
-            with g1:
-                st.markdown("#### 📈 Leads por Canal")
-                df_l = df_filtrado.groupby('Responsable')[['Leads WPP','Leads IG']].sum().reset_index()
-                if df_l[['Leads WPP','Leads IG']].sum().sum() > 0:
-                    fig = px.bar(df_l, x='Responsable', y=['Leads WPP','Leads IG'],
-                                 barmode='group', color_discrete_sequence=['#00d4aa','#7c6af7'])
-                    fig.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
-                    st.plotly_chart(fig, use_container_width=True)
-            with g2:
-                st.markdown("#### 💰 Depósitos por Comercial")
-                df_c = df_filtrado.groupby('Responsable')['Cierres'].sum().reset_index()
-                if df_c['Cierres'].sum() > 0:
-                    fig2 = px.bar(df_c, x='Responsable', y='Cierres',
-                                  color='Cierres', color_continuous_scale='teal')
-                    fig2.update_layout(coloraxis_showscale=False, **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
-                    st.plotly_chart(fig2, use_container_width=True)
+        # ══ EMBUDOS DE VENTAS ══════════════════════════════════════════════
+        st.markdown("### 🔻 Embudos de Ventas")
+        emb_col1, emb_col2 = st.columns(2)
 
-            if modo_fecha in ["Rango de fechas","Todos","Semana"] and 'Fecha' in df_filtrado.columns:
-                st.markdown("#### 📅 Evolución Diaria")
-                df_evo = df_filtrado.groupby('Fecha')['Cierres'].sum().reset_index()
-                if len(df_evo) > 1:
-                    fig3 = px.line(df_evo, x='Fecha', y='Cierres',
-                                   color_discrete_sequence=['#00d4aa'], markers=True)
-                    fig3.update_traces(fill='tozeroy', fillcolor='rgba(0,212,170,0.08)')
-                    fig3.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
-                    st.plotly_chart(fig3, use_container_width=True)
+        def render_embudo(titulo, etapas, valores, color_top, color_bot):
+            st.markdown(f"""<div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);
+                border:1px solid {color_top};border-radius:14px;padding:16px 20px;margin-bottom:10px">
+                <div style="color:{color_top};font-size:1rem;font-weight:800;margin-bottom:14px">{titulo}</div>
+            </div>""", unsafe_allow_html=True)
+            max_val = max(valores) if max(valores) > 0 else 1
+            n = len(etapas)
+            for i, (etapa, val) in enumerate(zip(etapas, valores)):
+                pct_ancho = max(20, int(val / max_val * 100))
+                # Color gradiente de arriba a abajo
+                r1,g1,b1 = int(color_top[1:3],16), int(color_top[3:5],16), int(color_top[5:7],16)
+                r2,g2,b2 = int(color_bot[1:3],16), int(color_bot[3:5],16), int(color_bot[5:7],16)
+                t = i/(n-1) if n > 1 else 0
+                r = int(r1 + (r2-r1)*t); g = int(g1 + (g2-g1)*t); b = int(b1 + (b2-b1)*t)
+                color_actual = f"#{r:02x}{g:02x}{b:02x}"
+                conv = f" · {round(val/valores[i-1]*100,1)}% conv." if i > 0 and valores[i-1] > 0 else ""
+                st.markdown(f"""
+                <div style="margin-bottom:6px">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                        <span style="color:#c9a84c;font-size:0.78rem;font-weight:600">{etapa}</span>
+                        <span style="color:white;font-size:0.78rem;font-weight:700">{val}{conv}</span>
+                    </div>
+                    <div style="background:#1e2340;border-radius:6px;height:28px;width:100%;position:relative">
+                        <div style="height:28px;border-radius:6px;background:{color_actual};
+                                    width:{pct_ancho}%;display:flex;align-items:center;padding-left:8px">
+                        </div>
+                    </div>
+                </div>""", unsafe_allow_html=True)
+
+        # ── Datos embudo España (manual por ahora) ──
+        etapas_esp = [
+            "📥 Leads Entrantes",
+            "📞 Contactado",
+            "🔇 No Contestó",
+            "⭐ Valoración",
+            "💵 Presupuesto",
+            "💳 Financiamiento",
+            "🏥 Valoración Presencial",
+            "📅 Agendado con Depósito",
+            "✅ Venta Cerrada"
+        ]
+        # Tomar leads del df filtrado para España
+        df_esp_emb = df_filtrado[df_filtrado['Grupo_Pais']=='España'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
+        leads_esp = int(df_esp_emb['Leads WPP'].sum() + df_esp_emb['Leads IG'].sum()) if not df_esp_emb.empty else 0
+        dep_esp   = int(df_esp_emb['Cierres'].sum()) if not df_esp_emb.empty else 0
+        val_esp   = int(df_esp_emb['Valoraciones'].sum()) if not df_esp_emb.empty else 0
+        pres_esp  = int(df_esp_emb['Venta Dia Siguiente'].sum()) if not df_esp_emb.empty else 0
+        valores_esp = [
+            leads_esp,
+            max(0, int(leads_esp*0.7)),
+            max(0, int(leads_esp*0.3)),
+            val_esp,
+            pres_esp,
+            max(0, int(pres_esp*0.5)),
+            max(0, int(pres_esp*0.4)),
+            dep_esp,
+            max(0, int(dep_esp*0.9))
+        ]
+
+        # ── Datos embudo USA ──
+        etapas_usa = [
+            "📥 Leads Entrantes",
+            "📞 Contactado",
+            "🔇 No Contesta",
+            "💻 Valoración Virtual",
+            "💵 Presupuesto",
+            "🏥 Agendado Presencial",
+            "📅 Agendado con Depósito"
+        ]
+        df_usa_emb = df_filtrado[df_filtrado['Grupo_Pais']=='USA'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
+        leads_usa = int(df_usa_emb['Leads WPP'].sum() + df_usa_emb['Leads IG'].sum()) if not df_usa_emb.empty else 0
+        dep_usa   = int(df_usa_emb['Cierres'].sum()) if not df_usa_emb.empty else 0
+        val_usa   = int(df_usa_emb['Valoraciones'].sum()) if not df_usa_emb.empty else 0
+        pres_usa  = int(df_usa_emb['Venta Dia Siguiente'].sum()) if not df_usa_emb.empty else 0
+        valores_usa = [
+            leads_usa,
+            max(0, int(leads_usa*0.7)),
+            max(0, int(leads_usa*0.3)),
+            val_usa,
+            pres_usa,
+            max(0, int(pres_usa*0.5)),
+            dep_usa
+        ]
+
+        with emb_col1:
+            render_embudo("🇪🇸 Embudo España", etapas_esp, valores_esp, "#00d4aa", "#c9a84c")
+        with emb_col2:
+            render_embudo("🇺🇸 Embudo USA", etapas_usa, valores_usa, "#7c6af7", "#f7a76c")
 
 # ══ TAB 2 — METAS ═══════════════════════════════════════════════════════════
 with tab2:
