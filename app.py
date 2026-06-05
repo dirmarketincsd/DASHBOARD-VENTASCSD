@@ -445,6 +445,14 @@ def cargar_campanas():
                     'Post engagement':                    'Engagement',
                 }
                 df = df.rename(columns=rename_map)
+
+                # Fallback por posición si el rename no funcionó
+                if 'Campaña' not in df.columns and len(df.columns) >= 14:
+                    nuevas = ['Campaña','Conjunto','Fecha','Clicks','CTR','Frecuencia',
+                              'Alcance','Inversion','CPC','Costo_Conexion','Clicks_Link',
+                              'Conversaciones','Nuevos_Contactos','Engagement']
+                    df.columns = nuevas + list(df.columns[14:])
+
                 df['País'] = pais
                 for col in ['Clicks','CTR','Frecuencia','Alcance','Inversion','CPC',
                             'Costo_Conexion','Clicks_Link','Conversaciones','Nuevos_Contactos','Engagement']:
@@ -1172,7 +1180,7 @@ with tab6:
 
         # Por Campaña
         st.markdown("### 📊 Rendimiento por Campaña")
-        if not df_camp.empty:
+        if not df_camp.empty and 'Campaña' in df_camp.columns and 'País' in df_camp.columns:
             df_by_camp = df_camp.groupby(['Campaña','País']).agg(
                 Inversión      = ('Inversion',       'sum'),
                 Alcance        = ('Alcance',          'sum'),
@@ -1215,7 +1223,7 @@ with tab6:
 
         # Por Sede / Ciudad
         st.markdown("### 📍 Rendimiento por Sede / Ciudad")
-        if not df_camp.empty and 'Sede' in df_camp.columns:
+        if not df_camp.empty and 'Sede' in df_camp.columns and 'País' in df_camp.columns:
             df_by_sede = df_camp.groupby(['Sede','País']).agg(
                 Inversión      = ('Inversion',       'sum'),
                 Alcance        = ('Alcance',          'sum'),
@@ -1255,7 +1263,7 @@ with tab6:
 
         # Tendencia Diaria
         st.markdown("### 📈 Tendencia Diaria")
-        if not df_camp_raw.empty and 'Fecha' in df_camp_raw.columns:
+        if not df_camp_raw.empty and 'Fecha' in df_camp_raw.columns and 'Inversion' in df_camp_raw.columns:
             df_daily = df_camp_raw.groupby('Fecha').agg(
                 Inversión      = ('Inversion',       'sum'),
                 Contactos      = ('Nuevos_Contactos','sum'),
