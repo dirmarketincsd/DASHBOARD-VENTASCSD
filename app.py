@@ -664,69 +664,127 @@ with tab6:
         <div style="color:#ffffff;font-size:1.6rem;font-weight:800">Rendimiento de Campañas Activas</div>
     </div>""", unsafe_allow_html=True)
 
-    # Cálculo dinámico basado en la data filtrada actual de canales
-    leads_wpp_c = get_val(df_filtrado, 'Leads WPP')
-    leads_ig_c = get_val(df_filtrado, 'Leads IG')
+    leads_wpp_c  = get_val(df_filtrado, 'Leads WPP')
+    leads_ig_c   = get_val(df_filtrado, 'Leads IG')
     leads_form_c = get_val(df_filtrado, 'Leads Formulario')
     leads_land_c = get_val(df_filtrado, 'Leads Landing')
-    leads_tik_c = get_val(df_filtrado, 'Leads TikTok')
-    cierres_c = get_val(df_filtrado, 'Cierres')
-    val_c = get_val(df_filtrado, 'Valoraciones')
+    leads_tik_c  = get_val(df_filtrado, 'Leads TikTok')
+    cierres_c    = get_val(df_filtrado, 'Cierres')
+    val_c        = get_val(df_filtrado, 'Valoraciones')
 
-    # Data estructurada de rendimiento (Cruzando orígenes con conversiones reales del consultorio)
     data_campanas = [
-        {"Campaña": "Implantes_Premium_USA", "Origen": "WhatsApp / Meta Ads", "Estado": "🟢 Activa", "Leads": int(leads_wpp_c * 0.6), "Valoraciones": int(val_c * 0.5), "Cierres": int(cierres_c * 0.6), "Inversión Estimada": "$450 USD"},
-        {"Campaña": "Diseno_Sonrisa_Form_ESP", "Origen": "Formulario / Meta Ads", "Estado": "🟢 Activa", "Leads": int(leads_form_c * 0.7), "Valoraciones": int(val_c * 0.3), "Cierres": int(cierres_c * 0.2), "Inversión Estimada": "$320 USD"},
-        {"Campaña": "Ortodoncia_Invis_Landing", "Origen": "Landing Page / Google Ads", "Estado": "🟢 Activa", "Leads": leads_land_c, "Valoraciones": int(val_c * 0.1), "Cierres": int(cierres_c * 0.1), "Inversión Estimada": "$280 USD"},
-        {"Campaña": "Branding_Smile_TikTok", "Origen": "TikTok Ads", "Estado": "🔴 Pausada", "Leads": leads_tik_c, "Valoraciones": int(val_c * 0.05), "Cierres": 0, "Inversión Estimada": "$120 USD"},
-        {"Campaña": "Retargeting_Instagram_DM", "Origen": "Instagram Direct / Manychat", "Estado": "🟢 Activa", "Leads": leads_ig_c, "Valoraciones": int(val_c * 0.05), "Cierres": int(cierres_c * 0.1), "Inversión Estimada": "$150 USD"}
+        {"Campaña": "Implantes_Premium_USA",      "Origen": "WhatsApp / Meta Ads",        "País": "🇺🇸 USA",    "Estado": "🟢 Activa",  "Leads": int(leads_wpp_c * 0.6),  "Valoraciones": int(val_c * 0.5),  "Cierres": int(cierres_c * 0.6), "Inversión Estimada": 450},
+        {"Campaña": "Diseno_Sonrisa_Form_ESP",    "Origen": "Formulario / Meta Ads",      "País": "🇪🇸 España", "Estado": "🟢 Activa",  "Leads": int(leads_form_c * 0.7), "Valoraciones": int(val_c * 0.3),  "Cierres": int(cierres_c * 0.2), "Inversión Estimada": 320},
+        {"Campaña": "Ortodoncia_Invis_Landing",   "Origen": "Landing Page / Google Ads",  "País": "🌍 Global",  "Estado": "🟢 Activa",  "Leads": leads_land_c,             "Valoraciones": int(val_c * 0.1),  "Cierres": int(cierres_c * 0.1), "Inversión Estimada": 280},
+        {"Campaña": "Branding_Smile_TikTok",      "Origen": "TikTok Ads",                 "País": "🌍 Global",  "Estado": "🔴 Pausada", "Leads": leads_tik_c,              "Valoraciones": int(val_c * 0.05), "Cierres": 0,                    "Inversión Estimada": 120},
+        {"Campaña": "Retargeting_Instagram_DM",   "Origen": "Instagram Direct / Manychat","País": "🇪🇸 España", "Estado": "🟢 Activa",  "Leads": leads_ig_c,               "Valoraciones": int(val_c * 0.05), "Cierres": int(cierres_c * 0.1), "Inversión Estimada": 150},
     ]
 
     df_camp = pd.DataFrame(data_campanas)
 
-    # Lógica inteligente para determinar la salud de la campaña
+    # ── Métricas derivadas ──────────────────────────────────────────────────
+    def safe_pct(num, den):
+        return round(num / den * 100, 1) if den > 0 else 0.0
+
     def evaluar_salud(row):
         if row['Estado'] == "🔴 Pausada":
             return "⚪ Inactiva"
-        if row['Leads'] > 0 and (row['Cierres'] / row['Leads']) >= 0.03:
+        leads = row['Leads']
+        if leads == 0:
+            return "⚠️ Sin Leads"
+        if safe_pct(row['Cierres'], leads) >= 3:
             return "🔥 Excelente"
-        elif row['Valoraciones'] > 0 and (row['Valoraciones'] / row['Leads']) >= 0.10:
+        if safe_pct(row['Valoraciones'], leads) >= 10:
             return "👍 Buena"
-        else:
-            return "⚠️ Optimizar"
+        return "⚠️ Optimizar"
 
-    df_camp['Evaluación'] = df_camp.apply(evaluar_salud, axis=1)
+    df_camp['CPL (USD)']      = df_camp.apply(lambda r: round(r['Inversión Estimada'] / r['Leads'], 1) if r['Leads'] > 0 else 0, axis=1)
+    df_camp['Conv. %']        = df_camp.apply(lambda r: safe_pct(r['Cierres'], r['Leads']), axis=1)
+    df_camp['Val. %']         = df_camp.apply(lambda r: safe_pct(r['Valoraciones'], r['Leads']), axis=1)
+    df_camp['Evaluación']     = df_camp.apply(evaluar_salud, axis=1)
+    df_camp['Inversión']      = df_camp['Inversión Estimada'].apply(lambda x: f"${x} USD")
 
-    # Vista de métricas rápidas superiores de marketing
-    m1, m2, m3 = st.columns(3)
-    m1.metric("📢 Campañas Monitoreadas", f"{len(df_camp)}")
-    m2.metric("🟢 Campañas Activas", f"{len(df_camp[df_camp['Estado']=='🟢 Activa'])}")
-    m3.metric("🔥 Campañas Rentables", f"{len(df_camp[df_camp['Evaluación'].isin(['🔥 Excelente', '👍 Buena'])])}")
+    # ── KPIs superiores ─────────────────────────────────────────────────────
+    total_leads    = df_camp['Leads'].sum()
+    total_cierres  = df_camp['Cierres'].sum()
+    total_inversion = df_camp['Inversión Estimada'].sum()
+    cpa = round(total_inversion / total_cierres, 1) if total_cierres > 0 else 0
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("📢 Campañas",       len(df_camp))
+    m2.metric("🟢 Activas",        len(df_camp[df_camp['Estado'] == '🟢 Activa']))
+    m3.metric("📥 Total Leads",    total_leads)
+    m4.metric("💰 Total Cierres",  total_cierres)
+    m5.metric("🎯 CPA Promedio",   f"${cpa} USD")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Renderizado de la tabla principal de control
-    st.markdown("#### 📋 Matriz de Efectividad (Leads Reales vs Cierres)")
+    # ── Tabla principal ─────────────────────────────────────────────────────
+    st.markdown("#### 📋 Matriz de Efectividad")
     st.dataframe(
-        df_camp[['Campaña', 'Origen', 'Estado', 'Leads', 'Valoraciones', 'Cierres', 'Inversión Estimada', 'Evaluación']],
+        df_camp[['Campaña','País','Origen','Estado','Leads','Valoraciones','Val. %','Cierres','Conv. %','CPL (USD)','Inversión','Evaluación']],
         use_container_width=True,
         hide_index=True
     )
 
-    # Diagnóstico y sugerencias automatizadas
     st.markdown("---")
-    st.markdown("### 🧠 Diagnóstico de Campañas Automático")
-    
-    criticas = df_camp[df_camp['Evaluación'] == "⚠️ Optimizar"]['Campaña'].tolist()
-    top_perf = df_camp[df_camp['Evaluación'] == "🔥 Excelente"]['Campaña'].tolist()
 
-    col_diag1, col_diag2 = st.columns(2)
-    with col_diag1:
+    # ── Gráficas ────────────────────────────────────────────────────────────
+    g1, g2 = st.columns(2)
+    with g1:
+        st.markdown("#### 📊 Leads vs Cierres por Campaña")
+        fig_c1 = go.Figure()
+        fig_c1.add_trace(go.Bar(name='Leads',    x=df_camp['Campaña'], y=df_camp['Leads'],    marker_color='#7c6af7'))
+        fig_c1.add_trace(go.Bar(name='Cierres',  x=df_camp['Campaña'], y=df_camp['Cierres'],  marker_color='#00d4aa'))
+        fig_c1.update_layout(barmode='group', **PLOT_CFG, margin=dict(t=20,b=60,l=0,r=0),
+                             xaxis=dict(tickangle=-20))
+        st.plotly_chart(fig_c1, use_container_width=True)
+
+    with g2:
+        st.markdown("#### 💸 Inversión por Campaña")
+        df_act = df_camp[df_camp['Estado'] == '🟢 Activa']
+        fig_c2 = px.pie(df_act, values='Inversión Estimada', names='Campaña', hole=0.5,
+                        color_discrete_sequence=['#7c6af7','#00d4aa','#c9a84c','#f7a76c','#ff6b6b'])
+        fig_c2.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+        st.plotly_chart(fig_c2, use_container_width=True)
+
+    g3, g4 = st.columns(2)
+    with g3:
+        st.markdown("#### 🎯 Tasa de Conversión % por Campaña")
+        df_conv_c = df_camp[df_camp['Leads'] > 0]
+        fig_c3 = px.bar(df_conv_c, x='Campaña', y='Conv. %', color='Conv. %',
+                        color_continuous_scale='teal', text='Conv. %')
+        fig_c3.update_traces(texttemplate='%{text}%')
+        fig_c3.update_layout(coloraxis_showscale=False, **PLOT_CFG,
+                             margin=dict(t=20,b=60,l=0,r=0), xaxis=dict(tickangle=-20))
+        st.plotly_chart(fig_c3, use_container_width=True)
+
+    with g4:
+        st.markdown("#### 💡 CPL (Costo por Lead) por Campaña")
+        df_cpl = df_camp[df_camp['Leads'] > 0].sort_values('CPL (USD)')
+        fig_c4 = px.bar(df_cpl, x='Campaña', y='CPL (USD)', color='CPL (USD)',
+                        color_continuous_scale='reds_r', text='CPL (USD)')
+        fig_c4.update_traces(texttemplate='$%{text}')
+        fig_c4.update_layout(coloraxis_showscale=False, **PLOT_CFG,
+                             margin=dict(t=20,b=60,l=0,r=0), xaxis=dict(tickangle=-20))
+        st.plotly_chart(fig_c4, use_container_width=True)
+
+    # ── Diagnóstico automático ───────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 🧠 Diagnóstico Automático")
+    top_perf = df_camp[df_camp['Evaluación'] == "🔥 Excelente"]['Campaña'].tolist()
+    buenas   = df_camp[df_camp['Evaluación'] == "👍 Buena"]['Campaña'].tolist()
+    criticas = df_camp[df_camp['Evaluación'] == "⚠️ Optimizar"]['Campaña'].tolist()
+    sin_data = df_camp[df_camp['Evaluación'] == "⚠️ Sin Leads"]['Campaña'].tolist()
+
+    col_d1, col_d2 = st.columns(2)
+    with col_d1:
         if top_perf:
-            st.success(f"🚀 **Escalar Presupuesto:** Las campañas **{', '.join(top_perf)}** presentan una tasa de conversión a depósito sobresaliente. Se sugiere aumentar la pauta un 15%.")
-        else:
-            st.info("ℹ️ Monitoreando datos de conversión para consolidar ganadoras.")
-            
-    with col_diag2:
+            st.success(f"🚀 **Escalar presupuesto:** {', '.join(top_perf)} tiene conversión ≥ 3%. Sube pauta 15-20%.")
+        if buenas:
+            st.info(f"👍 **Mantener:** {', '.join(buenas)} con buena tasa de valoraciones. Optimiza el cierre.")
+    with col_d2:
         if criticas:
-            st.warning(f"🛠️ **Revisar Funnel/Segmentación:** Las campañas **{', '.join(criticas)}** están generando leads pero el volumen de agendamiento o depósito es bajo. Revisa los flujos del bot de calificación.")
+            st.warning(f"🛠️ **Revisar funnel/segmentación:** {', '.join(criticas)} — leads entran pero no convierten.")
+        if sin_data:
+            st.error(f"⚠️ **Sin datos hoy:** {', '.join(sin_data)} — verifica que el período seleccionado tenga registros.")
