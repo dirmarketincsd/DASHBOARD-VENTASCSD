@@ -88,6 +88,7 @@ hr { border-color: #c9a84c !important; opacity: 0.3; }
 
 # ── CONFIGURACIÓN GLOBAL ───────────────────────────────────────────────────────
 SHEET_ID      = "1-KjGMIPUGcMynGfTYM7P68E_k0ylcZYeg0Wmgwd-36Q"
+CAMP_SHEET_ID = "1RXbgTLoybDjfHUtnC0DC7dmvL9lHME005m9SqqYRouY"
 PLOT_CFG      = dict(template='plotly_dark', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
 EQUIPOS_BASE  = {'CAROLINA': 'USA', 'DANIELA': 'España', 'EVELYN': 'España'}
 META_DIARIA   = 4
@@ -96,6 +97,9 @@ META_MENSUAL  = 100
 
 def sheet_url(nombre):
     return f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={nombre.replace(' ','%20')}"
+
+def camp_sheet_url(nombre):
+    return f"https://docs.google.com/spreadsheets/d/{CAMP_SHEET_ID}/gviz/tq?tqx=out:csv&sheet={nombre.replace(' ','%20')}"
 
 # ── CARGA VENTAS DIARIAS ───────────────────────────────────────────────────────
 @st.cache_data(ttl=60)
@@ -139,10 +143,10 @@ def cargar_ventas_diarias():
             df['Grupo_Pais'] = df.apply(asignar_grupo, axis=1)
         if 'Fecha' in df.columns:
             df['Fecha'] = pd.to_datetime(df['Fecha'], dayfirst=True, errors='coerce')
-            df['Fecha'] = df['Fecha'].ffill()  # ← hereda fecha a filas sin fecha (Daniela/Evelyn)
+            df['Fecha'] = df['Fecha'].ffill()
             df = df[df['Fecha'].notna()]
         if 'Dia_Texto' in df.columns:
-            df['Dia_Texto'] = df['Dia_Texto'].ffill()  # ← hereda día también
+            df['Dia_Texto'] = df['Dia_Texto'].ffill()
         DIAS_NORM = {'LUNES':'Lunes','MARTES':'Martes','MIERCOLES':'Miércoles',
                      'MIÉRCOLES':'Miércoles','JUEVES':'Jueves','VIERNES':'Viernes',
                      'SABADO':'Sábado','SÁBADO':'Sábado','DOMINGO':'Domingo'}
@@ -282,34 +286,24 @@ def cargar_tareas():
     try:
         url = sheet_url("TAREAS KOMMO")
         raw = pd.read_csv(url, header=None)
-
-        # La hoja tiene estructura: RESPONSABLE | TIPO | CANTIDAD | FECHA
-        # con filas vacías intercaladas y header en fila 0 o 1
-        # Buscar fila de encabezado real
         header_idx = 0
         for i in range(min(5, len(raw))):
             vals = [str(v).strip().upper() for v in raw.iloc[i].tolist()]
             if 'RESPONSABLE' in vals and 'TIPO' in vals:
                 header_idx = i
                 break
-
         rows = []
         current_resp = None
         SKIP = {'', 'NAN', 'NONE', 'RESPONSABLE', 'TOTAL', 'TOTALES'}
-
         for i in range(header_idx + 1, len(raw)):
             row = raw.iloc[i]
             col_a = str(row.iloc[0]).strip().upper() if len(row) > 0 else ''
             col_b = str(row.iloc[1]).strip().upper() if len(row) > 1 else ''
             col_c = str(row.iloc[2]).strip()          if len(row) > 2 else ''
             col_d = str(row.iloc[3]).strip()          if len(row) > 3 else ''
-
-            # Si col_a tiene nombre de asesor (sin tipo), actualizar responsable actual
             if col_a and col_a not in SKIP and col_b in ('', 'NAN', 'TIPO'):
                 current_resp = col_a
                 continue
-
-            # Si col_a tiene responsable Y col_b tiene tipo → fila de dato
             if col_a and col_a not in SKIP and col_b and col_b not in ('', 'NAN', 'TIPO'):
                 current_resp = col_a
                 tipo    = col_b
@@ -318,20 +312,16 @@ def cargar_tareas():
                 fecha = col_d if col_d not in ('', 'NAN') else ''
                 rows.append({'Responsable': current_resp, 'Tipo': tipo, 'Cantidad': cantidad, 'Fecha': fecha})
                 continue
-
-            # Si col_a vacío pero col_b tiene tipo → usa responsable anterior
             if (not col_a or col_a in SKIP) and col_b and col_b not in ('', 'NAN', 'TIPO') and current_resp:
                 tipo    = col_b
                 try:    cantidad = int(float(col_c)) if col_c not in ('', 'NAN') else 0
                 except: cantidad = 0
                 fecha = col_d if col_d not in ('', 'NAN') else ''
                 rows.append({'Responsable': current_resp, 'Tipo': tipo, 'Cantidad': cantidad, 'Fecha': fecha})
-
         df = pd.DataFrame(rows)
         if df.empty:
             return pd.DataFrame()
-
-        df = df[df['Cantidad'] > 0]  # solo tareas con cantidad > 0
+        df = df[df['Cantidad'] > 0]
         return df
     except Exception as e:
         st.error(f"Error tareas: {e}")
@@ -420,6 +410,79 @@ def cargar_agenda_pendiente():
         return pd.DataFrame(data_usa), pd.DataFrame(data_esp)
     except:
         return pd.DataFrame(), pd.DataFrame()
+
+# ── CARGA CAMPAÑAS META ADS ────────────────────────────────────────────────────
+@st.cache_data(ttl=60)
+def cargar_campanas():
+    try:
+        dfs = []
+        for tab, pais in [("USA 26", "🇺🇸 USA"), ("ESPAÑA 26", "🇪🇸 España")]:
+            try:
+                url = camp_sheet_url(tab)
+                raw = pd.read_csv(url, header=None)
+                header_idx = 0
+                for i in range(min(5, len(raw))):
+                    vals = [str(v).strip().lower() for v in raw.iloc[i].tolist()]
+                    if 'campaign name' in vals:
+                        header_idx = i
+                        break
+                df = pd.read_csv(url, skiprows=header_idx, header=0)
+                df.columns = [str(c).strip() for c in df.columns]
+                rename_map = {
+                    'Campaign name':                      'Campaña',
+                    'Ad set name':                        'Conjunto',
+                    'Date':                               'Fecha',
+                    'Clicks (all)':                       'Clicks',
+                    'CTR (all)':                          'CTR',
+                    'Frequency':                          'Frecuencia',
+                    'Reach':                              'Alcance',
+                    'Amount spent':                       'Inversion',
+                    'CPC (cost per link click)':          'CPC',
+                    'Cost per new messaging connection':  'Costo_Conexion',
+                    'Link clicks':                        'Clicks_Link',
+                    'Messaging conversations started':    'Conversaciones',
+                    'New messaging contacts':             'Nuevos_Contactos',
+                    'Post engagement':                    'Engagement',
+                }
+                df = df.rename(columns=rename_map)
+                df['País'] = pais
+                for col in ['Clicks','CTR','Frecuencia','Alcance','Inversion','CPC',
+                            'Costo_Conexion','Clicks_Link','Conversaciones','Nuevos_Contactos','Engagement']:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(
+                            df[col].astype(str).str.replace(',', '.', regex=False),
+                            errors='coerce'
+                        ).fillna(0)
+                if 'Fecha' in df.columns:
+                    df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce')
+                    df = df[df['Fecha'].notna()]
+                if 'Campaña' in df.columns:
+                    df = df[df['Campaña'].notna()]
+                    df = df[~df['Campaña'].astype(str).str.strip().isin(['', 'nan', 'None', 'Campaign name'])]
+                    df = df[df['Alcance'] > 0]
+                def extraer_sede(conjunto):
+                    c = str(conjunto).upper()
+                    if 'HOUSTON'   in c: return 'Houston'
+                    if 'DALLAS'    in c: return 'Dallas'
+                    if 'ANGELES'   in c: return 'Los Angeles'
+                    if 'ORLANDO'   in c: return 'Orlando'
+                    if 'JERSEY'    in c or 'JEERSEY' in c: return 'New Jersey'
+                    if 'MIAMI'     in c: return 'Miami'
+                    if 'ALICANTE'  in c: return 'Alicante'
+                    if 'BARCELONA' in c: return 'Barcelona'
+                    if 'MADRID'    in c: return 'Madrid'
+                    if 'VALENCIA'  in c: return 'Valencia'
+                    if 'MALAGA'    in c or 'MÁLAGA' in c: return 'Málaga'
+                    if 'BILBAO'    in c: return 'Bilbao'
+                    return 'Global'
+                df['Sede'] = df['Conjunto'].apply(extraer_sede)
+                dfs.append(df)
+            except:
+                continue
+        return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+    except Exception as e:
+        st.error(f"❌ Error campañas: {e}")
+        return pd.DataFrame()
 
 # ── HELPER ─────────────────────────────────────────────────────────────────────
 def get_val(df, col):
@@ -511,13 +574,12 @@ with col_title_h:
 st.markdown("---")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ✅ RESUMEN FIJO DE LA SEMANA — No se afecta por filtros
+# RESUMEN FIJO
 # ══════════════════════════════════════════════════════════════════════════════
 hoy_ts     = pd.Timestamp(date.today())
-inicio_sem = hoy_ts - timedelta(days=hoy_ts.weekday())   # Lunes de la semana actual
+inicio_sem = hoy_ts - timedelta(days=hoy_ts.weekday())
 inicio_mes = hoy_ts.replace(day=1)
 
-# Periodos fijos calculados desde df_base (sin filtros)
 df_semana_fija = pd.DataFrame()
 df_hoy_fija    = pd.DataFrame()
 df_mes_fija    = pd.DataFrame()
@@ -530,7 +592,6 @@ if not df_base.empty and 'Fecha' in df_base.columns:
 lunes_str = inicio_sem.strftime('%d/%m')
 hoy_str   = hoy_ts.strftime('%d/%m/%Y')
 
-# Toggle de periodo para el resumen fijo
 periodo_resumen = st.radio(
     "📊 Ver resumen fijo por:",
     ["📅 Hoy", "📆 Esta semana", "🗓️ Este mes"],
@@ -558,7 +619,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Fila USA (ancho completo, 7 columnas grandes) ──
 st.markdown('<div class="grupo-label-usa">🇺🇸 USA</div>', unsafe_allow_html=True)
 u1,u2,u3,u4,u5,u6,u7 = st.columns(7)
 u1.metric("💬 WPP",         get_val(df_rfijo_usa,'Leads WPP'))
@@ -571,7 +631,6 @@ u7.metric("💰 Depósitos",   get_val(df_rfijo_usa,'Cierres'))
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ── Fila España (ancho completo, 7 columnas grandes) ──
 st.markdown('<div class="grupo-label-esp">🇪🇸 España</div>', unsafe_allow_html=True)
 e1,e2,e3,e4,e5,e6,e7 = st.columns(7)
 e1.metric("💬 WPP",         get_val(df_rfijo_esp,'Leads WPP'))
@@ -587,7 +646,10 @@ st.markdown("---")
 # ══════════════════════════════════════════════════════════════════════════════
 # TABS
 # ══════════════════════════════════════════════════════════════════════════════
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Ventas Diarias","🎯 Metas","🇪🇸 España Mayo","🇺🇸 USA Mayo","🌍 Global"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "📋 Ventas Diarias","🎯 Metas","🇪🇸 España Mayo",
+    "🇺🇸 USA Mayo","🌍 Global","📢 Campañas Meta Ads"
+])
 
 # ══ TAB 1 — VENTAS DIARIAS ════════════════════════════════════════════════════
 with tab1:
@@ -604,7 +666,6 @@ with tab1:
     if df_filtrado.empty:
         st.warning("⚠️ Sin registros para estos filtros.")
     else:
-        # ── Tabla ──
         cols_vis = ['Fecha','Dia_Semana','Responsable','Grupo_Pais',
                     'Leads WPP','Leads IG','Leads Formulario','Leads Landing','Leads TikTok',
                     'Valoraciones','Venta Dia Siguiente','Cierres']
@@ -681,30 +742,24 @@ with tab1:
 
         st.markdown("---")
 
-        # ── Tareas Kommo ──
         st.markdown("### 📋 Tareas para Hoy")
         df_tareas = cargar_tareas()
         if not df_tareas.empty:
             ASESORES = ['DANIELA', 'EVELYN', 'CAROLINA']
             t_col1, t_col2 = st.columns(2)
-
             for idx, asesor in enumerate(ASESORES):
                 df_a  = df_tareas[df_tareas['Responsable'] == asesor] if 'Responsable' in df_tareas.columns else pd.DataFrame()
                 grupo = EQUIPOS_BASE.get(asesor, 'Por Clasificar')
                 color = "#00d4aa" if grupo == 'España' else "#7c6af7"
                 col_use = t_col1 if idx % 2 == 0 else t_col2
-
                 with col_use:
                     st.markdown(f"""
                     <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color};
                                 border-radius:12px;padding:14px 18px;margin-bottom:14px">
                         <div style="color:{color};font-weight:800;font-size:0.95rem;margin-bottom:12px">👤 {asesor}</div>
                     """, unsafe_allow_html=True)
-
                     if not df_a.empty and 'Tipo' in df_a.columns:
-                        # Mostrar todos los tipos con cantidad > 0
                         tipos_unicos = df_a['Tipo'].unique().tolist()
-                        # Dividir en filas de 3
                         cols_t = st.columns(min(len(tipos_unicos), 3))
                         for i, tipo in enumerate(tipos_unicos):
                             cant = int(df_a[df_a['Tipo'] == tipo]['Cantidad'].sum())
@@ -718,12 +773,10 @@ with tab1:
                             cols_t[i % 3].metric(f"{emoji} {tipo.capitalize()}", cant)
                     else:
                         st.info("Sin tareas registradas.")
-
                     st.markdown("</div>", unsafe_allow_html=True)
         else:
             st.info("📝 Sin tareas registradas.")
 
-        # ── Ranking Valoraciones ──
         st.markdown("#### 🏆 Ranking de Valoraciones")
         if not df_base.empty and 'Responsable' in df_base.columns and 'Valoraciones' in df_base.columns:
             df_rank_val = df_base.groupby('Responsable')['Valoraciones'].sum().reset_index()
@@ -749,7 +802,6 @@ with tab1:
 
         st.markdown("---")
 
-        # ── Ventas Cerradas ──
         st.markdown("### ✅ Ventas Cerradas")
         df_vc_usa, df_vc_esp = cargar_ventas_cerradas()
         vc1, vc2 = st.columns(2)
@@ -770,7 +822,6 @@ with tab1:
 
         st.markdown("---")
 
-        # ── Agenda Pendiente ──
         st.markdown("### 📅 Agenda Pendiente")
         df_ag_usa, df_ag_esp = cargar_agenda_pendiente()
         ag1, ag2 = st.columns(2)
@@ -865,7 +916,6 @@ with tab2:
                 else:
                     st.info("Sin depósitos hoy.")
 
-            # España
             st.markdown("""<div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #00d4aa;
                 border-radius:14px;padding:12px 20px;margin-bottom:12px">
                 <span style="color:#00d4aa;font-size:1.1rem;font-weight:800">🇪🇸 GRUPO ESPAÑA</span>
@@ -879,7 +929,6 @@ with tab2:
 
             st.markdown("---")
 
-            # USA
             st.markdown("""<div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #7c6af7;
                 border-radius:14px;padding:12px 20px;margin-bottom:12px">
                 <span style="color:#7c6af7;font-size:1.1rem;font-weight:800">🇺🇸 GRUPO USA</span>
@@ -893,7 +942,6 @@ with tab2:
 
             st.markdown("---")
 
-            # Ranking mensual global
             st.markdown("#### 🏆 Ranking Mensual Global por Asesor")
             df_mes_all = df_m[df_m['Fecha'] >= inicio_mes] if 'Fecha' in df_m.columns else pd.DataFrame()
             if not df_mes_all.empty and 'Responsable' in df_mes_all.columns:
@@ -1073,3 +1121,178 @@ with tab5:
     st.markdown("---")
     st.dataframe(df_global.sort_values(['País','Realizados'],ascending=[True,False]),
                  use_container_width=True, hide_index=True)
+
+# ══ TAB 6 — CAMPAÑAS META ADS ═════════════════════════════════════════════════
+with tab6:
+    st.markdown("""
+    <div style="margin-bottom:15px">
+        <div style="color:#c9a84c;font-size:0.75rem;text-transform:uppercase;letter-spacing:2px;font-weight:700">Marketing & Analytics</div>
+        <div style="color:#ffffff;font-size:1.6rem;font-weight:800">📢 Rendimiento de Campañas Meta Ads</div>
+        <div style="color:#c9a84c;font-size:0.85rem">🇺🇸 USA · 🇪🇸 España · Datos reales desde Meta Ads · Valores en COP</div>
+    </div>""", unsafe_allow_html=True)
+
+    df_camp_raw = cargar_campanas()
+
+    if df_camp_raw.empty:
+        st.warning("⚠️ Sin datos de campañas. Verifica que el Google Sheet de Meta Ads sea público o esté compartido.")
+    else:
+        # Aplicar filtros del sidebar
+        df_camp = df_camp_raw.copy()
+        if 'Fecha' in df_camp.columns:
+            if modo_fecha == "Día específico" and fecha_ini is not None:
+                df_camp = df_camp[df_camp['Fecha'].dt.date == fecha_ini.date()]
+            elif modo_fecha == "Rango de fechas" and fecha_ini is not None:
+                df_camp = df_camp[(df_camp['Fecha'] >= fecha_ini) & (df_camp['Fecha'] <= fecha_fin)]
+
+        def s_sum(df, col):
+            return int(df[col].sum()) if not df.empty and col in df.columns else 0
+
+        # KPIs — Hoy vs Ayer
+        df_hoy_c  = df_camp_raw[df_camp_raw['Fecha'].dt.date == hoy_ts.date()] if 'Fecha' in df_camp_raw.columns else pd.DataFrame()
+        df_ayer_c = df_camp_raw[df_camp_raw['Fecha'].dt.date == (hoy_ts - timedelta(days=1)).date()] if 'Fecha' in df_camp_raw.columns else pd.DataFrame()
+
+        inv_hoy     = s_sum(df_hoy_c, 'Inversion')
+        inv_ayer    = s_sum(df_ayer_c, 'Inversion')
+        cont_hoy    = s_sum(df_hoy_c, 'Nuevos_Contactos')
+        cont_ayer   = s_sum(df_ayer_c, 'Nuevos_Contactos')
+        conv_hoy    = s_sum(df_hoy_c, 'Conversaciones')
+        clicks_hoy  = s_sum(df_hoy_c, 'Clicks_Link')
+        alcance_hoy = s_sum(df_hoy_c, 'Alcance')
+        cpl_hoy     = round(inv_hoy / cont_hoy) if cont_hoy > 0 else 0
+
+        k1,k2,k3,k4,k5,k6 = st.columns(6)
+        k1.metric("💸 Inversión Hoy",    f"${inv_hoy:,.0f}",   delta=f"{inv_hoy-inv_ayer:+,.0f}" if inv_ayer else None)
+        k2.metric("👥 Nuevos Contactos", cont_hoy,             delta=cont_hoy - cont_ayer if cont_ayer else None)
+        k3.metric("💬 Conversaciones",   conv_hoy)
+        k4.metric("🖱️ Link Clicks",      clicks_hoy)
+        k5.metric("👁️ Alcance",          f"{alcance_hoy:,}")
+        k6.metric("💰 CPL Hoy (COP)",    f"${cpl_hoy:,.0f}")
+
+        st.markdown("---")
+
+        # Por Campaña
+        st.markdown("### 📊 Rendimiento por Campaña")
+        if not df_camp.empty:
+            df_by_camp = df_camp.groupby(['Campaña','País']).agg(
+                Inversión      = ('Inversion',       'sum'),
+                Alcance        = ('Alcance',          'sum'),
+                Clicks         = ('Clicks_Link',      'sum'),
+                Conversaciones = ('Conversaciones',   'sum'),
+                Contactos      = ('Nuevos_Contactos', 'sum'),
+                Engagement     = ('Engagement',       'sum'),
+                Días           = ('Fecha',            'nunique'),
+            ).reset_index()
+            df_by_camp['CPL'] = df_by_camp.apply(
+                lambda r: round(r['Inversión'] / r['Contactos']) if r['Contactos'] > 0 else 0, axis=1
+            )
+            df_by_camp['CTR %'] = df_by_camp.apply(
+                lambda r: round(r['Clicks'] / r['Alcance'] * 100, 2) if r['Alcance'] > 0 else 0, axis=1
+            )
+            df_by_camp = df_by_camp.sort_values('Contactos', ascending=False)
+
+            c1, c2 = st.columns(2)
+            with c1:
+                fig_bc1 = go.Figure()
+                fig_bc1.add_trace(go.Bar(name='Nuevos Contactos', x=df_by_camp['Campaña'], y=df_by_camp['Contactos'],      marker_color='#00d4aa'))
+                fig_bc1.add_trace(go.Bar(name='Conversaciones',   x=df_by_camp['Campaña'], y=df_by_camp['Conversaciones'], marker_color='#7c6af7'))
+                fig_bc1.update_layout(barmode='group', **PLOT_CFG, margin=dict(t=20,b=120,l=0,r=0), xaxis=dict(tickangle=-25))
+                st.plotly_chart(fig_bc1, use_container_width=True)
+            with c2:
+                fig_bc2 = px.pie(
+                    df_by_camp[df_by_camp['Inversión']>0],
+                    values='Inversión', names='Campaña', hole=0.5,
+                    color_discrete_sequence=['#7c6af7','#00d4aa','#c9a84c','#f7a76c','#ff6b6b','#5bc8ef']
+                )
+                fig_bc2.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+                st.plotly_chart(fig_bc2, use_container_width=True)
+
+            st.dataframe(
+                df_by_camp[['Campaña','País','Días','Inversión','Alcance','Clicks','Conversaciones','Contactos','CPL','CTR %','Engagement']],
+                use_container_width=True, hide_index=True
+            )
+
+        st.markdown("---")
+
+        # Por Sede / Ciudad
+        st.markdown("### 📍 Rendimiento por Sede / Ciudad")
+        if not df_camp.empty and 'Sede' in df_camp.columns:
+            df_by_sede = df_camp.groupby(['Sede','País']).agg(
+                Inversión      = ('Inversion',       'sum'),
+                Alcance        = ('Alcance',          'sum'),
+                Clicks         = ('Clicks_Link',      'sum'),
+                Conversaciones = ('Conversaciones',   'sum'),
+                Contactos      = ('Nuevos_Contactos', 'sum'),
+            ).reset_index()
+            df_by_sede['CPL'] = df_by_sede.apply(
+                lambda r: round(r['Inversión'] / r['Contactos']) if r['Contactos'] > 0 else 0, axis=1
+            )
+            df_by_sede = df_by_sede.sort_values('Contactos', ascending=False)
+
+            s1, s2 = st.columns(2)
+            with s1:
+                st.markdown("#### 👥 Contactos por Sede")
+                fig_s1 = px.bar(
+                    df_by_sede, x='Sede', y='Contactos', color='País', text='Contactos',
+                    color_discrete_map={'🇺🇸 USA':'#7c6af7','🇪🇸 España':'#00d4aa'}
+                )
+                fig_s1.update_traces(textposition='outside')
+                fig_s1.update_layout(**PLOT_CFG, margin=dict(t=20,b=60,l=0,r=0))
+                st.plotly_chart(fig_s1, use_container_width=True)
+            with s2:
+                st.markdown("#### 💰 CPL por Sede (COP)")
+                df_cpl_s = df_by_sede[df_by_sede['CPL']>0].sort_values('CPL')
+                fig_s2 = px.bar(
+                    df_cpl_s, x='Sede', y='CPL',
+                    color='CPL', color_continuous_scale='reds_r', text='CPL'
+                )
+                fig_s2.update_traces(texttemplate='$%{text:,.0f}')
+                fig_s2.update_layout(coloraxis_showscale=False, **PLOT_CFG, margin=dict(t=20,b=60,l=0,r=0))
+                st.plotly_chart(fig_s2, use_container_width=True)
+
+            st.dataframe(df_by_sede, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+        # Tendencia Diaria
+        st.markdown("### 📈 Tendencia Diaria")
+        if not df_camp_raw.empty and 'Fecha' in df_camp_raw.columns:
+            df_daily = df_camp_raw.groupby('Fecha').agg(
+                Inversión      = ('Inversion',       'sum'),
+                Contactos      = ('Nuevos_Contactos','sum'),
+                Conversaciones = ('Conversaciones',  'sum'),
+                Clicks         = ('Clicks_Link',     'sum'),
+                Alcance        = ('Alcance',         'sum'),
+            ).reset_index().sort_values('Fecha')
+            df_daily['CPL'] = df_daily.apply(
+                lambda r: round(r['Inversión']/r['Contactos']) if r['Contactos']>0 else 0, axis=1
+            )
+
+            d1, d2 = st.columns(2)
+            with d1:
+                st.markdown("#### 👥 Contactos y Conversaciones diarias")
+                fig_d1 = go.Figure()
+                fig_d1.add_trace(go.Scatter(x=df_daily['Fecha'], y=df_daily['Contactos'],
+                    name='Nuevos Contactos', line=dict(color='#00d4aa', width=2), mode='lines+markers'))
+                fig_d1.add_trace(go.Scatter(x=df_daily['Fecha'], y=df_daily['Conversaciones'],
+                    name='Conversaciones', line=dict(color='#7c6af7', width=2), mode='lines+markers'))
+                fig_d1.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+                st.plotly_chart(fig_d1, use_container_width=True)
+            with d2:
+                st.markdown("#### 💸 Inversión Diaria (COP)")
+                fig_d2 = px.bar(df_daily, x='Fecha', y='Inversión',
+                    color='Inversión', color_continuous_scale='teal')
+                fig_d2.update_layout(coloraxis_showscale=False, **PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+                st.plotly_chart(fig_d2, use_container_width=True)
+
+            st.markdown("#### 💡 CPL Diario (COP)")
+            fig_cpl = go.Figure()
+            fig_cpl.add_trace(go.Scatter(
+                x=df_daily['Fecha'], y=df_daily['CPL'],
+                fill='tozeroy', line=dict(color='#c9a84c', width=2),
+                name='CPL', mode='lines+markers'
+            ))
+            fig_cpl.update_layout(**PLOT_CFG, margin=dict(t=20,b=0,l=0,r=0))
+            st.plotly_chart(fig_cpl, use_container_width=True)
+
+        st.markdown("---")
+        st.caption("📌 Datos desde Google Sheet conectado a Meta Ads · Valores en pesos colombianos (COP) · Se actualiza cada 60 seg")
