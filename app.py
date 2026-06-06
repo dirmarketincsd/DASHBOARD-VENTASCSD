@@ -107,6 +107,10 @@ def cargar_ventas_diarias():
     try:
         url = sheet_url("Ventas diarias")
         raw = pd.read_csv(url, header=None)
+        
+        st.write("RAW primeras 10 filas:")
+        st.dataframe(raw.head(10))
+        
         header_idx = 3
         for i in range(min(10, len(raw))):
             vals = [str(v).strip().upper() for v in raw.iloc[i].tolist()]
@@ -130,6 +134,9 @@ def cargar_ventas_diarias():
         }
         df = df.rename(columns=rename)
 
+        st.write("DF antes de filtros:")
+        st.dataframe(df.head(10))
+
         # 1. PROCESAR FECHA Y DIA PRIMERO (antes de filtrar)
         if 'Fecha' in df.columns:
             df['Fecha'] = pd.to_datetime(df['Fecha'], dayfirst=True, errors='coerce')
@@ -137,6 +144,9 @@ def cargar_ventas_diarias():
 
         if 'Dia_Texto' in df.columns:
             df['Dia_Texto'] = df['Dia_Texto'].ffill()
+
+        st.write("DF después de ffill fecha:")
+        st.dataframe(df.head(10))
 
         # 2. LUEGO filtrar por Responsable
         if 'Responsable' in df.columns:
@@ -151,6 +161,9 @@ def cargar_ventas_diarias():
                 if any(x in sede for x in ['DALLAS','HOUSTON','ORLANDO','JERSEY','ANGELES','MIAMI','USA']): return 'USA'
                 return 'Por Clasificar'
             df['Grupo_Pais'] = df.apply(asignar_grupo, axis=1)
+
+        st.write("DF después de filtro Responsable:")
+        st.dataframe(df.head(10))
 
         # 3. Eliminar filas sin fecha válida
         if 'Fecha' in df.columns:
