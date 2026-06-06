@@ -107,12 +107,24 @@ def cargar_ventas_diarias():
     try:
         url = sheet_url("Ventas diarias")
         raw = pd.read_csv(url, header=None)
+        
         header_idx = 3
         for i in range(min(10, len(raw))):
             vals = [str(v).strip().upper() for v in raw.iloc[i].tolist()]
             if 'FECHA' in vals and 'RESPONSABLE' in vals:
                 header_idx = i
                 break
+        
+        st.write(f"header_idx detectado: {header_idx}")
+        st.write("Fila header:")
+        st.write(raw.iloc[header_idx].tolist())
+        st.write("Fila header+1 (primera data):")
+        st.write(raw.iloc[header_idx+1].tolist())
+        st.write("Fila header+2:")
+        st.write(raw.iloc[header_idx+2].tolist())
+        st.write("Fila header+3:")
+        st.write(raw.iloc[header_idx+3].tolist())
+
         df = pd.read_csv(url, skiprows=header_idx, header=0)
         df.columns = [str(c).strip().upper().replace('  ',' ') for c in df.columns]
         df = df.iloc[:, :11]
@@ -130,7 +142,6 @@ def cargar_ventas_diarias():
         }
         df = df.rename(columns=rename)
 
-        # 1. Reemplazar celdas vacías y NaN en Fecha por None para ffill correcto
         if 'Fecha' in df.columns:
             df['Fecha'] = df['Fecha'].astype(str).str.strip()
             df['Fecha'] = df['Fecha'].replace({'nan':'', 'None':'', 'N/A':''})
@@ -144,7 +155,6 @@ def cargar_ventas_diarias():
             df['Dia_Texto'] = df['Dia_Texto'].replace('', None)
             df['Dia_Texto'] = df['Dia_Texto'].ffill()
 
-        # 2. Filtrar Responsable
         if 'Responsable' in df.columns:
             df = df[df['Responsable'].notna()]
             df['Responsable'] = df['Responsable'].astype(str).str.strip().str.upper()
@@ -158,11 +168,9 @@ def cargar_ventas_diarias():
                 return 'Por Clasificar'
             df['Grupo_Pais'] = df.apply(asignar_grupo, axis=1)
 
-        # 3. Eliminar filas sin fecha
         if 'Fecha' in df.columns:
             df = df[df['Fecha'].notna()]
 
-        # 4. Normalizar día de semana
         DIAS_NORM = {'LUNES':'Lunes','MARTES':'Martes','MIERCOLES':'Miércoles',
                      'MIÉRCOLES':'Miércoles','JUEVES':'Jueves','VIERNES':'Viernes',
                      'SABADO':'Sábado','SÁBADO':'Sábado','DOMINGO':'Domingo'}
@@ -177,7 +185,6 @@ def cargar_ventas_diarias():
         if 'Semana' not in df.columns: df['Semana'] = '1'
         df['Semana'] = df['Semana'].astype(str).str.strip()
 
-        # 5. Convertir columnas numéricas
         for col in ['Valoraciones','Leads WPP','Leads IG','Leads Formulario','Leads Landing','Leads TikTok','Cierres','Venta Dia Siguiente']:
             if col in df.columns:
                 serie = df[col].astype(str).str.strip()
