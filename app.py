@@ -129,6 +129,16 @@ def cargar_ventas_diarias():
             'VENTA DIA SIGUIENTE(AGENDADOS)':'Venta Dia Siguiente'
         }
         df = df.rename(columns=rename)
+
+        # 1. PROCESAR FECHA Y DIA PRIMERO (antes de filtrar)
+        if 'Fecha' in df.columns:
+            df['Fecha'] = pd.to_datetime(df['Fecha'], dayfirst=True, errors='coerce')
+            df['Fecha'] = df['Fecha'].ffill()
+
+        if 'Dia_Texto' in df.columns:
+            df['Dia_Texto'] = df['Dia_Texto'].ffill()
+
+        # 2. LUEGO filtrar por Responsable
         if 'Responsable' in df.columns:
             df = df[df['Responsable'].notna()]
             df['Responsable'] = df['Responsable'].astype(str).str.strip().str.upper()
@@ -141,12 +151,12 @@ def cargar_ventas_diarias():
                 if any(x in sede for x in ['DALLAS','HOUSTON','ORLANDO','JERSEY','ANGELES','MIAMI','USA']): return 'USA'
                 return 'Por Clasificar'
             df['Grupo_Pais'] = df.apply(asignar_grupo, axis=1)
+
+        # 3. Eliminar filas sin fecha válida
         if 'Fecha' in df.columns:
-            df['Fecha'] = pd.to_datetime(df['Fecha'], dayfirst=True, errors='coerce')
-            df['Fecha'] = df['Fecha'].ffill()
             df = df[df['Fecha'].notna()]
-        if 'Dia_Texto' in df.columns:
-            df['Dia_Texto'] = df['Dia_Texto'].ffill()
+
+        # 4. Normalizar día de semana
         DIAS_NORM = {'LUNES':'Lunes','MARTES':'Martes','MIERCOLES':'Miércoles',
                      'MIÉRCOLES':'Miércoles','JUEVES':'Jueves','VIERNES':'Viernes',
                      'SABADO':'Sábado','SÁBADO':'Sábado','DOMINGO':'Domingo'}
@@ -157,8 +167,11 @@ def cargar_ventas_diarias():
             df['Dia_Semana'] = df['Fecha'].dt.dayofweek.map(lambda x: nombres[x])
         else:
             df['Dia_Semana'] = 'Sin dato'
+
         if 'Semana' not in df.columns: df['Semana'] = '1'
         df['Semana'] = df['Semana'].astype(str).str.strip()
+
+        # 5. Convertir columnas numéricas
         for col in ['Valoraciones','Leads WPP','Leads IG','Leads Formulario','Leads Landing','Leads TikTok','Cierres','Venta Dia Siguiente']:
             if col in df.columns:
                 serie = df[col].astype(str).str.strip()
@@ -168,6 +181,7 @@ def cargar_ventas_diarias():
                 df[col] = pd.to_numeric(serie, errors='coerce').fillna(0).clip(lower=0).astype(int)
             else:
                 df[col] = 0
+
         return df
     except Exception as e:
         st.error(f"❌ Error ventas diarias: {e}")
