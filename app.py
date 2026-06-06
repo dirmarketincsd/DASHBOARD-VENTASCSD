@@ -108,22 +108,26 @@ def cargar_ventas_diarias():
         url = sheet_url("Ventas diarias")
         raw = pd.read_csv(url, header=None)
         
-        header_idx = 3
-        for i in range(min(10, len(raw))):
+        # Buscar fila header más flexible
+        header_idx = None
+        for i in range(min(15, len(raw))):
             vals = [str(v).strip().upper() for v in raw.iloc[i].tolist()]
-            if 'FECHA' in vals and 'RESPONSABLE' in vals:
+            if 'RESPONSABLE' in vals and ('FECHA' in vals or 'DIA' in vals):
                 header_idx = i
                 break
         
-        st.write(f"header_idx detectado: {header_idx}")
-        st.write("Fila header:")
-        st.write(raw.iloc[header_idx].tolist())
-        st.write("Fila header+1 (primera data):")
-        st.write(raw.iloc[header_idx+1].tolist())
-        st.write("Fila header+2:")
-        st.write(raw.iloc[header_idx+2].tolist())
-        st.write("Fila header+3:")
-        st.write(raw.iloc[header_idx+3].tolist())
+        # Si no encontró header, buscar fila con DANIELA/EVELYN/CAROLINA como indicador
+        # y retroceder para encontrar el header real
+        if header_idx is None:
+            for i in range(min(15, len(raw))):
+                vals = [str(v).strip().upper() for v in raw.iloc[i].tolist()]
+                if any(x in vals for x in ['DANIELA','EVELYN','CAROLINA']):
+                    # El header está una fila antes
+                    header_idx = i - 1
+                    break
+        
+        if header_idx is None:
+            header_idx = 3
 
         df = pd.read_csv(url, skiprows=header_idx, header=0)
         df.columns = [str(c).strip().upper().replace('  ',' ') for c in df.columns]
@@ -131,7 +135,7 @@ def cargar_ventas_diarias():
         df.columns = ['FECHA','DIA','RESPONSABLE','VALORACIONES','LEADS WPP','LEADS IG',
                       'LEADS FORMULARIO','LEADS LANDING','LEADS TIKTOK','DEPOSITOS','PRESUPUESTADO']
         rename = {
-            'FECHA':'Fecha', 'DIA':'Dia_Texto', 'SEMANA':'Semana',
+            'FECHA':'Fecha', 'DIA':'Dia_Texto',
             'RESPONSABLE':'Responsable', 'VALORACIONES':'Valoraciones',
             'LEADS WPP':'Leads WPP', 'LEADS IG':'Leads IG',
             'LEADS FORMULARIO':'Leads Formulario', 'LEADS LANDING':'Leads Landing',
