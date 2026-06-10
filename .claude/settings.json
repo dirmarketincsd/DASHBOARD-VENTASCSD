@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import config, styles, components, data_loaders; from tabs import ventas_diarias, metas, espana, usa, global_tab, campanas; print\\('OK - imports resueltos correctamente'\\)\")",
+      "Bash(python -c \"import streamlit,plotly,pandas; print\\('streamlit',streamlit.__version__\\); print\\('plotly',plotly.__version__\\); print\\('pandas',pandas.__version__\\)\")"
+    ]
+  }
+}
