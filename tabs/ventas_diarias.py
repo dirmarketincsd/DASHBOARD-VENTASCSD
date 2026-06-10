@@ -71,13 +71,25 @@ def render(ctx):
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown("**📅 Agendados**")
-                df_ag = df_mes[['Sede','S1_Ag','S2_Ag','S3_Ag','S4_Ag','S5_Ag','Total_Ag','% Conv']].copy()
-                df_ag.columns = ['Sede','S1','S2','S3','S4','S5','Total','% Conv']
+                cols_ag = ['Sede'] + [c for c in ['Sem1_Ag','Sem2_Ag','Sem3_Ag','Sem4_Ag','Sem5_Ag','Total_Ag','% Conv'] if c in df_mes.columns]
+                df_ag = df_mes[cols_ag].copy()
+                # Renombrar: Sem1_Ag→S1, Sem2_Ag→S2 ... Total_Ag→Total, % Conv→% Conv
+                new_cols = ['Sede']
+                for c in cols_ag[1:]:
+                    if c == 'Total_Ag':   new_cols.append('Total')
+                    elif c == '% Conv':   new_cols.append('% Conv')
+                    else:                 new_cols.append(c.replace('Sem','S').replace('_Ag',''))
+                df_ag.columns = new_cols
                 st.dataframe(df_ag, use_container_width=True, hide_index=True)
             with c2:
                 st.markdown("**✅ Realizados**")
-                df_re = df_mes[['Sede','S1_Re','S2_Re','S3_Re','S4_Re','S5_Re','Total_Re']].copy()
-                df_re.columns = ['Sede','S1','S2','S3','S4','S5','Total']
+                cols_re = ['Sede'] + [c for c in ['Sem1_Re','Sem2_Re','Sem3_Re','Sem4_Re','Sem5_Re','Total_Re'] if c in df_mes.columns]
+                df_re = df_mes[cols_re].copy()
+                new_cols_re = ['Sede']
+                for c in cols_re[1:]:
+                    if c == 'Total_Re': new_cols_re.append('Total')
+                    else:               new_cols_re.append(c.replace('Sem','S').replace('_Re',''))
+                df_re.columns = new_cols_re
                 st.dataframe(df_re, use_container_width=True, hide_index=True)
 
         if grupo_sel in ('Todos', 'USA'):
