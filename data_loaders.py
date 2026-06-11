@@ -19,13 +19,10 @@ def cargar_ventas_diarias():
                 header_idx = i
                 break
 
-        # Si no encontró header, buscar fila con DANIELA/EVELYN/CAROLINA como indicador
-        # y retroceder para encontrar el header real
         if header_idx is None:
             for i in range(min(15, len(raw))):
                 vals = [str(v).strip().upper() for v in raw.iloc[i].tolist()]
                 if any(x in vals for x in ['DANIELA','EVELYN','CAROLINA']):
-                    # El header está una fila antes
                     header_idx = i - 1
                     break
 
@@ -34,18 +31,20 @@ def cargar_ventas_diarias():
 
         df = pd.read_csv(url, skiprows=header_idx, header=0)
         df.columns = [str(c).strip().upper().replace('  ',' ') for c in df.columns]
-        df = df.iloc[:, :11]
+        df = df.iloc[:, :15]
         df.columns = ['FECHA','DIA','RESPONSABLE','VALORACIONES','LEADS WPP','LEADS IG',
-                      'LEADS FORMULARIO','LEADS LANDING','LEADS TIKTOK','DEPOSITOS','PRESUPUESTADO']
+                      'LEADS FORMULARIO','LEADS GOOGLE','LEADS TIKTOK','LEADS LANDING',
+                      'FINANCIAMIENTO','NO FINANCIAMIENTO','OTROS','DEPOSITOS','PRESUPUESTADO']
+
         rename = {
             'FECHA':'Fecha', 'DIA':'Dia_Texto',
             'RESPONSABLE':'Responsable', 'VALORACIONES':'Valoraciones',
             'LEADS WPP':'Leads WPP', 'LEADS IG':'Leads IG',
-            'LEADS FORMULARIO':'Leads Formulario', 'LEADS LANDING':'Leads Landing',
-            'LEADS TIKTOK':'Leads TikTok', 'SEDE':'Sede',
+            'LEADS FORMULARIO':'Leads Formulario', 'LEADS GOOGLE':'Leads Google',
+            'LEADS TIKTOK':'Leads TikTok', 'LEADS LANDING':'Leads Landing',
+            'FINANCIAMIENTO':'Financiamiento', 'NO FINANCIAMIENTO':'No Financiamiento',
+            'OTROS':'Otros',
             'DEPOSITOS':'Cierres', 'PRESUPUESTADO':'Venta Dia Siguiente',
-            'CIERRES AGENDADOS':'Cierres',
-            'VENTA DIA SIGUIENTE(AGENDADOS)':'Venta Dia Siguiente'
         }
         df = df.rename(columns=rename)
 
@@ -92,7 +91,9 @@ def cargar_ventas_diarias():
         if 'Semana' not in df.columns: df['Semana'] = '1'
         df['Semana'] = df['Semana'].astype(str).str.strip()
 
-        for col in ['Valoraciones','Leads WPP','Leads IG','Leads Formulario','Leads Landing','Leads TikTok','Cierres','Venta Dia Siguiente']:
+        for col in ['Valoraciones','Leads WPP','Leads IG','Leads Formulario','Leads Google',
+                    'Leads TikTok','Leads Landing','Financiamiento','No Financiamiento','Otros',
+                    'Cierres','Venta Dia Siguiente']:
             if col in df.columns:
                 serie = df[col].astype(str).str.strip()
                 serie = serie.replace({'N/A':'0','n/a':'0','NA':'0','nan':'0','None':'0','':'0'}, regex=False)
@@ -387,7 +388,6 @@ def cargar_campanas():
                 }
                 df = df.rename(columns=rename_map)
 
-                # Fallback por posición si el rename no funcionó
                 if 'Campaña' not in df.columns and len(df.columns) >= 14:
                     nuevas = ['Campaña','Conjunto','Fecha','Clicks','CTR','Frecuencia',
                               'Alcance','Inversion','CPC','Costo_Conexion','Clicks_Link',
@@ -438,6 +438,7 @@ def cargar_campanas():
 def get_val(df, col):
     return int(df[col].sum()) if not df.empty and col in df.columns else 0
 
+
 # ── CARGA VENTAS MES (AGENDADOS / REALIZADOS POR SEDE) ─────────────────────────
 @st.cache_data(ttl=300)
 def cargar_ventas_mes(pais: str):
@@ -447,7 +448,6 @@ def cargar_ventas_mes(pais: str):
     Sede, Sem1_Ag, Sem2_Ag, Sem3_Ag, Sem4_Ag, Sem5_Ag, Total_Ag,
               Sem1_Re, Sem2_Re, Sem3_Re, Sem4_Re, Sem5_Re, Total_Re
     """
-    from config import SHEET_ID
     nombre = f"VENTAS MES DE JUNIO - {pais}"
     try:
         url = sheet_url(nombre)
@@ -467,7 +467,6 @@ def cargar_ventas_mes(pais: str):
                         try: return float(v.replace(',','.'))
                         except: return 0.0
                     nums = [to_num(v) for v in fila[1:] if v not in ('','nan','None','TOTAL','TOTALES')]
-                    # Estructura: 5 semanas agendados + total + 5 semanas realizados + total = 12 valores
                     ag = nums[0:5] if len(nums) >= 5 else (nums[:len(nums)] + [0]*(5-len(nums)))
                     total_ag = nums[5] if len(nums) > 5 else sum(ag)
                     re = nums[6:11] if len(nums) >= 11 else ([0]*5)
@@ -485,10 +484,8 @@ def cargar_ventas_mes(pais: str):
             return pd.DataFrame()
 
         df = pd.DataFrame(rows)
-        # Fila TOTAL
         total_row = {col: df[col].sum() if col != 'Sede' else 'TOTAL' for col in df.columns}
         df = pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
-        # % conversión
         df['% Conv'] = df.apply(
             lambda r: f"{round(r['Total_Re']/r['Total_Ag']*100,1)}%" if r['Total_Ag'] > 0 else '—', axis=1
         )

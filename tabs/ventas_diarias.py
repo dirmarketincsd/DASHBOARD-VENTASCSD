@@ -36,17 +36,23 @@ def render(ctx):
     if df_filtrado.empty:
         st.warning("⚠️ Sin registros para estos filtros.")
     else:
-        cols_vis = ['Fecha','Dia_Semana','Responsable','Grupo_Pais',
-                    'Leads WPP','Leads IG','Leads Formulario','Leads Landing','Leads TikTok',
-                    'Valoraciones','Venta Dia Siguiente','Cierres']
+        cols_vis = [
+            'Fecha', 'Dia_Semana', 'Responsable', 'Grupo_Pais',
+            'Leads WPP', 'Leads IG', 'Leads Formulario', 'Leads Google',
+            'Leads Landing', 'Leads TikTok',
+            'Financiamiento', 'No Financiamiento', 'Otros',
+            'Valoraciones', 'Venta Dia Siguiente', 'Cierres',
+        ]
         cols_ok  = [c for c in cols_vis if c in df_filtrado.columns]
         df_show  = df_filtrado[cols_ok].copy()
         if 'Fecha' in df_show.columns:
             df_show = df_show.sort_values('Fecha', ascending=True)
             df_show['Fecha'] = df_show['Fecha'].dt.strftime('%d/%m/%Y')
         df_show = df_show.rename(columns={
-            'Venta Dia Siguiente':'Presupuestado', 'Cierres':'Depósitos',
-            'Dia_Semana':'Día', 'Grupo_Pais':'Grupo'
+            'Venta Dia Siguiente': 'Presupuestado',
+            'Cierres':             'Depósitos',
+            'Dia_Semana':          'Día',
+            'Grupo_Pais':          'Grupo',
         })
         totales = {c: df_show[c].sum() if c in df_show.columns else '' for c in df_show.columns}
         totales['Fecha'] = '📊 TOTAL'; totales['Día'] = ''; totales['Responsable'] = ''; totales['Grupo'] = ''
@@ -73,7 +79,6 @@ def render(ctx):
                 st.markdown("**📅 Agendados**")
                 cols_ag = ['Sede'] + [c for c in ['Sem1_Ag','Sem2_Ag','Sem3_Ag','Sem4_Ag','Sem5_Ag','Total_Ag','% Conv'] if c in df_mes.columns]
                 df_ag = df_mes[cols_ag].copy()
-                # Renombrar: Sem1_Ag→S1, Sem2_Ag→S2 ... Total_Ag→Total, % Conv→% Conv
                 new_cols = ['Sede']
                 for c in cols_ag[1:]:
                     if c == 'Total_Ag':   new_cols.append('Total')
@@ -108,20 +113,26 @@ def render(ctx):
         val_esp   = int(df_esp_emb['Valoraciones'].sum())        if not df_esp_emb.empty else 0
         pres_esp  = int(df_esp_emb['Venta Dia Siguiente'].sum()) if not df_esp_emb.empty else 0
         dep_esp   = int(df_esp_emb['Cierres'].sum())             if not df_esp_emb.empty else 0
+        fin_esp   = int(df_esp_emb['Financiamiento'].sum())      if not df_esp_emb.empty and 'Financiamiento' in df_esp_emb.columns else 0
+        nofin_esp = int(df_esp_emb['No Financiamiento'].sum())   if not df_esp_emb.empty and 'No Financiamiento' in df_esp_emb.columns else 0
 
         leads_usa = int(df_usa_emb['Leads WPP'].sum() + df_usa_emb['Leads IG'].sum()) if not df_usa_emb.empty else 0
         val_usa   = int(df_usa_emb['Valoraciones'].sum())        if not df_usa_emb.empty else 0
         pres_usa  = int(df_usa_emb['Venta Dia Siguiente'].sum()) if not df_usa_emb.empty else 0
         dep_usa   = int(df_usa_emb['Cierres'].sum())             if not df_usa_emb.empty else 0
+        fin_usa   = int(df_usa_emb['Financiamiento'].sum())      if not df_usa_emb.empty and 'Financiamiento' in df_usa_emb.columns else 0
+        nofin_usa = int(df_usa_emb['No Financiamiento'].sum())   if not df_usa_emb.empty and 'No Financiamiento' in df_usa_emb.columns else 0
 
         etapas_esp = [
             ("📥 Leads", leads_esp), ("📞 Contactado", "—"), ("🔇 No Contestó", "—"),
-            ("⭐ Valoración", val_esp), ("💵 Presupuesto", pres_esp), ("💳 Financiamiento", "—"),
+            ("⭐ Valoración", val_esp), ("💵 Presupuesto", pres_esp),
+            ("✅ Financiamiento", fin_esp), ("❌ No Financiamiento", nofin_esp),
             ("🏥 Val. Presencial", "—"), ("📅 Ag. Depósito", dep_esp), ("✅ Venta Cerrada", "—"),
         ]
         etapas_usa = [
             ("📥 Leads", leads_usa), ("📞 Contactado", "—"), ("🔇 No Contesta", "—"),
             ("💻 Val. Virtual", val_usa), ("💵 Presupuesto", pres_usa),
+            ("✅ Financiamiento", fin_usa), ("❌ No Financiamiento", nofin_usa),
             ("🏥 Ag. Presencial", "—"), ("📅 Ag. Depósito", dep_usa),
         ]
 
