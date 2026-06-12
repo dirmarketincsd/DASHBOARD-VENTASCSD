@@ -4,7 +4,7 @@ from urllib.parse import quote
 SHEET_ID      = "1-KjGMIPUGcMynGfTYM7P68E_k0ylcZYeg0Wmgwd-36Q"
 CAMP_SHEET_ID = "1RXbgTLoybDjfHUtnC0DC7dmvL9lHME005m9SqqYRouY"
 PLOT_CFG      = dict(template='plotly_dark', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-EQUIPOS_BASE  = {'CAROLINA': 'USA', 'DANIELA': 'España', 'EVELYN': 'España'}
+EQUIPOS_BASE  = {'ORLANDITO': 'USA', 'CAROLINA': 'USA', 'DANIELA': 'España', 'EVELYN': 'España'}
 
 # Cambia estos 3 cada mes nuevo
 PERIODO_LABEL = "Junio 2026"
