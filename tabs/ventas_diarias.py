@@ -5,6 +5,105 @@ import streamlit as st
 
 from config import EQUIPOS_BASE
 from data_loaders import cargar_ventas_mes
+from config import sheet_url
+
+
+@st.cache_data(ttl=300)
+def cargar_tabla_detallada(pais: str):
+    """
+    Lee 'usa mayo 2026' o 'España mayo 2026' y extrae la tabla de
+    AGENDADOS y REALIZADOS con columnas por tipo de diseño y semana.
+    """
+    nombre = "usa mayo 2026" if pais == "USA" else "España mayo 2026"
+    try:
+        url = sheet_url(nombre)
+        raw = pd.read_csv(url, header=None)
+
+        COLS_TIPOS = ['Diseño Resina', 'Imp. Ceromero', 'Cem. Ceromero',
+                      'Imp. Ceramica', 'Cem. Ceramica', 'Extractif.', 'Garantias']
+
+        if pais == "USA":
+            sedes = ['DALLAS', 'HOUSTON', 'NEW JERSY', 'ORLANDO', 'ANGELES']
+            sedes_label = ['Dallas', 'Houston', 'New Jersey', 'Orlando', 'Los Angeles']
+        else:
+            sedes = ['ALICANTE', 'BARCELONA', 'VALENCIA', 'MADRID', 'MALAGA', 'BILBAO']
+            sedes_label = ['Alicante', 'Barcelona', 'Valencia', 'Madrid', 'Malaga', 'Bilbao']
+
+        # Encontrar fila de sedes (AGENDADOS)
+        ag_rows = {}
+        re_rows = {}
+
+        for i in range(len(raw)):
+            val = str(raw.iloc[i, 0]).strip().upper().replace(' ', '')
+            for j, sede in enumerate(sedes):
+                if val == sede.replace(' ', '') or sede.replace(' ', '') in val:
+                    fila = [str(v).strip() for v in raw.iloc[i].tolist()]
+                    def to_num(v):
+                        try: return float(v.replace(',', '.'))
+                        except: return 0.0
+                    nums = [to_num(v) for v in fila[1:] if v not in ('', 'nan', 'None')]
+
+                    # Agendados: primeras 28 posiciones (4 semanas x 7 cols)
+                    ag_data = nums[:28] if len(nums) >= 28 else nums + [0] * (28 - len(nums))
+                    # Realizados: siguientes 28
+                    re_data = nums[28:56] if len(nums) >= 56 else (nums[28:] if len(nums) > 28 else [0] * 28)
+                    re_data = re_data + [0] * (28 - len(re_data))
+
+                    ag_rows[sedes_label[j]] = ag_data
+                    re_rows[sedes_label[j]] = re_data
+                    break
+
+        return ag_rows, re_rows, COLS_TIPOS
+
+    except Exception as e:
+        st.error(f"Error cargando tabla detallada {pais}: {e}")
+        return {}, {}, []
+
+
+def render_tabla_detallada(ag_rows, re_rows, cols_tipos, color, pais):
+    if not ag_rows:
+        st.info(f"Sin datos {pais}.")
+        return
+
+    semanas = ['S1', 'S2', 'S3', 'S4']
+    n = len(cols_tipos)  # 7
+
+    # Construir DataFrame AGENDADOS
+    ag_records = []
+    for sede, nums in ag_rows.items():
+        row = {'Sede': sede}
+        for s_i, sem in enumerate(semanas):
+            for t_i, tipo in enumerate(cols_tipos):
+                idx = s_i * n + t_i
+                row[f'{sem} · {tipo}'] = nums[idx] if idx < len(nums) else 0
+        ag_records.append(row)
+    df_ag = pd.DataFrame(ag_records)
+
+    # Totales agendados
+    total_ag = {col: df_ag[col].sum() if col != 'Sede' else 'TOTAL' for col in df_ag.columns}
+    df_ag = pd.concat([df_ag, pd.DataFrame([total_ag])], ignore_index=True)
+
+    # Construir DataFrame REALIZADOS
+    re_records = []
+    for sede, nums in re_rows.items():
+        row = {'Sede': sede}
+        for s_i, sem in enumerate(semanas):
+            for t_i, tipo in enumerate(cols_tipos):
+                idx = s_i * n + t_i
+                row[f'{sem} · {tipo}'] = nums[idx] if idx < len(nums) else 0
+        re_records.append(row)
+    df_re = pd.DataFrame(re_records)
+
+    total_re = {col: df_re[col].sum() if col != 'Sede' else 'TOTAL' for col in df_re.columns}
+    df_re = pd.concat([df_re, pd.DataFrame([total_re])], ignore_index=True)
+
+    st.markdown(f"<div style='color:{color};font-weight:800;font-size:1rem;margin-bottom:8px'>{pais}</div>", unsafe_allow_html=True)
+
+    st.markdown("**📅 Agendados**")
+    st.dataframe(df_ag, use_container_width=True, hide_index=True)
+
+    st.markdown("**✅ Realizados**")
+    st.dataframe(df_re, use_container_width=True, hide_index=True)
 
 
 def render(ctx):
@@ -57,41 +156,15 @@ def render(ctx):
         csv = df_filtrado.to_csv(index=False).encode('utf-8')
         st.download_button("⬇️ Descargar CSV", data=csv, file_name=f"ventas_{date.today()}.csv", mime="text/csv")
 
-    # ── VENTAS DEL MES ─────────────────────────────────────────────────────────
+    # ── VALORACIONES DEL MES ───────────────────────────────────────────────────
     st.markdown("---")
     st.markdown("### 📅 Valoraciones del Mes")
 
-    def render_tabla_mes(df_mes, pais, color):
-        if df_mes is None or df_mes.empty:
-            st.info(f"Sin datos {pais}.")
-            return
-        st.markdown(f"<div style='color:{color};font-weight:800;font-size:1rem;margin-bottom:8px'>{pais}</div>", unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**📅 Agendados**")
-            cols_ag = ['Sede'] + [c for c in ['Sem1_Ag','Sem2_Ag','Sem3_Ag','Sem4_Ag','Sem5_Ag','Total_Ag','% Conv'] if c in df_mes.columns]
-            df_ag = df_mes[cols_ag].copy()
-            new_cols = ['Sede']
-            for c in cols_ag[1:]:
-                if c == 'Total_Ag':  new_cols.append('Total')
-                elif c == '% Conv':  new_cols.append('% Conv')
-                else:                new_cols.append(c.replace('Sem','S').replace('_Ag',''))
-            df_ag.columns = new_cols
-            st.dataframe(df_ag, use_container_width=True, hide_index=True)
-        with c2:
-            st.markdown("**✅ Realizados**")
-            cols_re = ['Sede'] + [c for c in ['Sem1_Re','Sem2_Re','Sem3_Re','Sem4_Re','Sem5_Re','Total_Re'] if c in df_mes.columns]
-            df_re = df_mes[cols_re].copy()
-            new_cols_re = ['Sede']
-            for c in cols_re[1:]:
-                if c == 'Total_Re': new_cols_re.append('Total')
-                else:               new_cols_re.append(c.replace('Sem','S').replace('_Re',''))
-            df_re.columns = new_cols_re
-            st.dataframe(df_re, use_container_width=True, hide_index=True)
-
     if grupo_sel in ('Todos', 'USA'):
-        render_tabla_mes(cargar_ventas_mes('USA'), '🇺🇸 USA', '#7c6af7')
+        ag_rows, re_rows, cols_tipos = cargar_tabla_detallada('USA')
+        render_tabla_detallada(ag_rows, re_rows, cols_tipos, '#7c6af7', '🇺🇸 USA')
         st.markdown("<br>", unsafe_allow_html=True)
 
     if grupo_sel in ('Todos', 'España'):
-        render_tabla_mes(cargar_ventas_mes('España'), '🇪🇸 España', '#00d4aa')
+        ag_rows, re_rows, cols_tipos = cargar_tabla_detallada('España')
+        render_tabla_detallada(ag_rows, re_rows, cols_tipos, '#00d4aa', '🇪🇸 España')
