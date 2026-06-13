@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 from styles import get_logo_base64, inject_css
-from data_loaders import cargar_ventas_diarias, get_val
+from data_loaders import cargar_ventas_diarias
 from tabs import ventas_diarias, metas, espana, usa, global_tab, campanas
 
 logo_b64 = get_logo_base64()
@@ -103,78 +103,12 @@ with col_title_h:
 st.markdown("---")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# RESUMEN FIJO
+# CONTEXTO COMPARTIDO + TABS
 # ══════════════════════════════════════════════════════════════════════════════
 hoy_ts     = pd.Timestamp(date.today())
 inicio_sem = hoy_ts - timedelta(days=hoy_ts.weekday())
 inicio_mes = hoy_ts.replace(day=1)
 
-df_semana_fija = pd.DataFrame()
-df_hoy_fija    = pd.DataFrame()
-df_mes_fija    = pd.DataFrame()
-
-if not df_base.empty and 'Fecha' in df_base.columns:
-    df_semana_fija = df_base[(df_base['Fecha'] >= inicio_sem) & (df_base['Fecha'] <= hoy_ts)]
-    df_hoy_fija    = df_base[df_base['Fecha'].dt.date == hoy_ts.date()]
-    df_mes_fija    = df_base[(df_base['Fecha'] >= inicio_mes) & (df_base['Fecha'] <= hoy_ts)]
-
-lunes_str = inicio_sem.strftime('%d/%m')
-hoy_str   = hoy_ts.strftime('%d/%m/%Y')
-
-periodo_resumen = st.radio(
-    "📊 Ver resumen fijo por:",
-    ["📅 Hoy", "📆 Esta semana", "🗓️ Este mes"],
-    horizontal=True,
-    key="periodo_resumen_toggle"
-)
-
-if periodo_resumen == "📅 Hoy":
-    df_resumen_fijo = df_hoy_fija
-    label_periodo   = f"Hoy — {hoy_str}"
-elif periodo_resumen == "📆 Esta semana":
-    df_resumen_fijo = df_semana_fija
-    label_periodo   = f"Semana — {lunes_str} al {hoy_str}"
-else:
-    df_resumen_fijo = df_mes_fija
-    label_periodo   = f"Mes — {inicio_mes.strftime('%d/%m')} al {hoy_str}"
-
-df_rfijo_usa = df_resumen_fijo[df_resumen_fijo['Grupo_Pais']=='USA']    if not df_resumen_fijo.empty and 'Grupo_Pais' in df_resumen_fijo.columns else pd.DataFrame()
-df_rfijo_esp = df_resumen_fijo[df_resumen_fijo['Grupo_Pais']=='España'] if not df_resumen_fijo.empty and 'Grupo_Pais' in df_resumen_fijo.columns else pd.DataFrame()
-
-st.markdown(f"""
-<div class="resumen-fijo">
-    <div class="resumen-fijo-titulo">📊 Resumen Fijo · Independiente de filtros</div>
-    <div class="resumen-fijo-sub">⏱ {label_periodo}</div>
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown('<div class="grupo-label-usa">🇺🇸 USA</div>', unsafe_allow_html=True)
-u1,u2,u3,u4,u5,u6,u7 = st.columns(7)
-u1.metric("💬 WPP",         get_val(df_rfijo_usa,'Leads WPP'))
-u2.metric("📸 IG",          get_val(df_rfijo_usa,'Leads IG'))
-u3.metric("📝 Formulario",  get_val(df_rfijo_usa,'Leads Formulario'))
-u4.metric("🌐 Landing",     get_val(df_rfijo_usa,'Leads Landing'))
-u5.metric("🎵 TikTok",      get_val(df_rfijo_usa,'Leads TikTok'))
-u6.metric("⭐ Valoraciones",get_val(df_rfijo_usa,'Valoraciones'))
-u7.metric("💰 Depósitos",   get_val(df_rfijo_usa,'Cierres'))
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-st.markdown('<div class="grupo-label-esp">🇪🇸 España</div>', unsafe_allow_html=True)
-e1,e2,e3,e4,e5,e6,e7 = st.columns(7)
-e1.metric("💬 WPP",         get_val(df_rfijo_esp,'Leads WPP'))
-e2.metric("📸 IG",          get_val(df_rfijo_esp,'Leads IG'))
-e3.metric("📝 Formulario",  get_val(df_rfijo_esp,'Leads Formulario'))
-e4.metric("🌐 Landing",     get_val(df_rfijo_esp,'Leads Landing'))
-e5.metric("🎵 TikTok",      get_val(df_rfijo_esp,'Leads TikTok'))
-e6.metric("⭐ Valoraciones",get_val(df_rfijo_esp,'Valoraciones'))
-e7.metric("💰 Depósitos",   get_val(df_rfijo_esp,'Cierres'))
-
-st.markdown("---")
-
-# ══════════════════════════════════════════════════════════════════════════════
-# CONTEXTO COMPARTIDO + TABS
-# ══════════════════════════════════════════════════════════════════════════════
 ctx = {
     'df_base':         df_base,
     'df_filtrado':     df_filtrado,
