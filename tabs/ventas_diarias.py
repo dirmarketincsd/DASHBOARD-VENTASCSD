@@ -4,7 +4,6 @@ import pandas as pd
 import streamlit as st
 
 from config import EQUIPOS_BASE
-from components import render_embudo_horizontal
 from data_loaders import (
     cargar_tareas,
     cargar_ventas_cerradas,
@@ -61,84 +60,6 @@ def render(ctx):
         st.dataframe(df_final, use_container_width=True, hide_index=True)
         csv = df_filtrado.to_csv(index=False).encode('utf-8')
         st.download_button("⬇️ Descargar CSV", data=csv, file_name=f"ventas_{date.today()}.csv", mime="text/csv")
-
-        # ── VENTAS DEL MES ─────────────────────────────────────────────────
-        from data_loaders import cargar_ventas_mes
-        from config import PERIODO_LABEL
-
-        st.markdown("---")
-        st.markdown(f"### 📅 Ventas del Mes · {PERIODO_LABEL}")
-
-        def render_tabla_mes(df_mes, pais, color):
-            if df_mes.empty:
-                st.info(f"Sin datos {pais}.")
-                return
-            st.markdown(f"<div style='color:{color};font-weight:800;font-size:0.9rem;margin-bottom:6px'>{pais}</div>", unsafe_allow_html=True)
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown("**📅 Agendados**")
-                cols_ag = ['Sede'] + [c for c in ['Sem1_Ag','Sem2_Ag','Sem3_Ag','Sem4_Ag','Sem5_Ag','Total_Ag','% Conv'] if c in df_mes.columns]
-                df_ag = df_mes[cols_ag].copy()
-                new_cols = ['Sede']
-                for c in cols_ag[1:]:
-                    if c == 'Total_Ag':   new_cols.append('Total')
-                    elif c == '% Conv':   new_cols.append('% Conv')
-                    else:                 new_cols.append(c.replace('Sem','S').replace('_Ag',''))
-                df_ag.columns = new_cols
-                st.dataframe(df_ag, use_container_width=True, hide_index=True)
-            with c2:
-                st.markdown("**✅ Realizados**")
-                cols_re = ['Sede'] + [c for c in ['Sem1_Re','Sem2_Re','Sem3_Re','Sem4_Re','Sem5_Re','Total_Re'] if c in df_mes.columns]
-                df_re = df_mes[cols_re].copy()
-                new_cols_re = ['Sede']
-                for c in cols_re[1:]:
-                    if c == 'Total_Re': new_cols_re.append('Total')
-                    else:               new_cols_re.append(c.replace('Sem','S').replace('_Re',''))
-                df_re.columns = new_cols_re
-                st.dataframe(df_re, use_container_width=True, hide_index=True)
-
-        if grupo_sel in ('Todos', 'USA'):
-            render_tabla_mes(cargar_ventas_mes('USA'), '🇺🇸 USA', '#7c6af7')
-
-        if grupo_sel in ('Todos', 'España'):
-            render_tabla_mes(cargar_ventas_mes('España'), '🇪🇸 España', '#00d4aa')
-
-        st.markdown("---")
-        st.markdown("### 🔻 Embudos de Ventas")
-
-        df_esp_emb = df_filtrado[df_filtrado['Grupo_Pais']=='España'] if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
-        df_usa_emb = df_filtrado[df_filtrado['Grupo_Pais']=='USA']    if 'Grupo_Pais' in df_filtrado.columns else pd.DataFrame()
-
-        leads_esp = int(df_esp_emb['Leads WPP'].sum() + df_esp_emb['Leads IG'].sum()) if not df_esp_emb.empty else 0
-        val_esp   = int(df_esp_emb['Valoraciones'].sum())        if not df_esp_emb.empty else 0
-        pres_esp  = int(df_esp_emb['Venta Dia Siguiente'].sum()) if not df_esp_emb.empty else 0
-        dep_esp   = int(df_esp_emb['Cierres'].sum())             if not df_esp_emb.empty else 0
-        fin_esp   = int(df_esp_emb['Financiamiento'].sum())      if not df_esp_emb.empty and 'Financiamiento' in df_esp_emb.columns else 0
-        nofin_esp = int(df_esp_emb['No Financiamiento'].sum())   if not df_esp_emb.empty and 'No Financiamiento' in df_esp_emb.columns else 0
-
-        leads_usa = int(df_usa_emb['Leads WPP'].sum() + df_usa_emb['Leads IG'].sum()) if not df_usa_emb.empty else 0
-        val_usa   = int(df_usa_emb['Valoraciones'].sum())        if not df_usa_emb.empty else 0
-        pres_usa  = int(df_usa_emb['Venta Dia Siguiente'].sum()) if not df_usa_emb.empty else 0
-        dep_usa   = int(df_usa_emb['Cierres'].sum())             if not df_usa_emb.empty else 0
-        fin_usa   = int(df_usa_emb['Financiamiento'].sum())      if not df_usa_emb.empty and 'Financiamiento' in df_usa_emb.columns else 0
-        nofin_usa = int(df_usa_emb['No Financiamiento'].sum())   if not df_usa_emb.empty and 'No Financiamiento' in df_usa_emb.columns else 0
-
-        etapas_esp = [
-            ("📥 Leads", leads_esp), ("📞 Contactado", "—"), ("🔇 No Contestó", "—"),
-            ("⭐ Valoración", val_esp), ("💵 Presupuesto", pres_esp),
-            ("✅ Financiamiento", fin_esp), ("❌ No Financiamiento", nofin_esp),
-            ("🏥 Val. Presencial", "—"), ("📅 Ag. Depósito", dep_esp), ("✅ Venta Cerrada", "—"),
-        ]
-        etapas_usa = [
-            ("📥 Leads", leads_usa), ("📞 Contactado", "—"), ("🔇 No Contesta", "—"),
-            ("💻 Val. Virtual", val_usa), ("💵 Presupuesto", pres_usa),
-            ("✅ Financiamiento", fin_usa), ("❌ No Financiamiento", nofin_usa),
-            ("🏥 Ag. Presencial", "—"), ("📅 Ag. Depósito", dep_usa),
-        ]
-
-        render_embudo_horizontal("🇪🇸 Embudo España", etapas_esp, "#00d4aa")
-        st.markdown("<br>", unsafe_allow_html=True)
-        render_embudo_horizontal("🇺🇸 Embudo USA", etapas_usa, "#7c6af7")
 
         st.markdown("---")
 
