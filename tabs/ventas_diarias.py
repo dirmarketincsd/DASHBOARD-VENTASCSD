@@ -4,9 +4,6 @@ import pandas as pd
 import streamlit as st
 
 from config import EQUIPOS_BASE
-from data_loaders import (
-    cargar_tareas,
-)
 
 
 def render(ctx):
@@ -58,63 +55,3 @@ def render(ctx):
         st.dataframe(df_final, use_container_width=True, hide_index=True)
         csv = df_filtrado.to_csv(index=False).encode('utf-8')
         st.download_button("⬇️ Descargar CSV", data=csv, file_name=f"ventas_{date.today()}.csv", mime="text/csv")
-
-        st.markdown("---")
-
-        st.markdown("### 📋 Tareas para Hoy")
-        df_tareas = cargar_tareas()
-        if not df_tareas.empty:
-            ASESORES = ['DANIELA', 'EVELYN', 'CAROLINA']
-            t_col1, t_col2 = st.columns(2)
-            for idx, asesor in enumerate(ASESORES):
-                df_a  = df_tareas[df_tareas['Responsable'] == asesor] if 'Responsable' in df_tareas.columns else pd.DataFrame()
-                grupo = EQUIPOS_BASE.get(asesor, 'Por Clasificar')
-                color = "#00d4aa" if grupo == 'España' else "#7c6af7"
-                col_use = t_col1 if idx % 2 == 0 else t_col2
-                with col_use:
-                    st.markdown(f"""
-                    <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color};
-                                border-radius:12px;padding:14px 18px;margin-bottom:14px">
-                        <div style="color:{color};font-weight:800;font-size:0.95rem;margin-bottom:12px">👤 {asesor}</div>
-                    """, unsafe_allow_html=True)
-                    if not df_a.empty and 'Tipo' in df_a.columns:
-                        tipos_unicos = df_a['Tipo'].unique().tolist()
-                        cols_t = st.columns(min(len(tipos_unicos), 3))
-                        for i, tipo in enumerate(tipos_unicos):
-                            cant = int(df_a[df_a['Tipo'] == tipo]['Cantidad'].sum())
-                            EMOJIS = {
-                                'VALORACION': '💻', 'VALORACION VIRTUAL': '💻',
-                                'SEGUIMIENTO': '📞', 'PRESUPUESTAR': '💵',
-                                'AGENDAR': '📅', 'COLOCAR DATOS': '📝',
-                                'SOPORTE HUMANO': '🤝',
-                            }
-                            emoji = EMOJIS.get(tipo.upper(), '📌')
-                            cols_t[i % 3].metric(f"{emoji} {tipo.capitalize()}", cant)
-                    else:
-                        st.info("Sin tareas registradas.")
-                    st.markdown("</div>", unsafe_allow_html=True)
-        else:
-            st.info("📝 Sin tareas registradas.")
-
-        st.markdown("#### 🏆 Ranking de Valoraciones")
-        if not df_base.empty and 'Responsable' in df_base.columns and 'Valoraciones' in df_base.columns:
-            df_rank_val = df_base.groupby('Responsable')['Valoraciones'].sum().reset_index()
-            df_rank_val = df_rank_val[df_rank_val['Valoraciones'] > 0].sort_values('Valoraciones', ascending=False)
-            total_val = df_rank_val['Valoraciones'].sum()
-            if total_val > 0:
-                df_rank_val['%'] = (df_rank_val['Valoraciones'] / total_val * 100).round(1)
-                df_rank_val['Grupo'] = df_rank_val['Responsable'].map(lambda x: EQUIPOS_BASE.get(x,'Por Clasificar'))
-                for _, row in df_rank_val.iterrows():
-                    color = "#00d4aa" if row['Grupo'] == 'España' else "#7c6af7"
-                    p = row['%']
-                    st.markdown(f"""
-                    <div style="background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid #2a2000;
-                                border-radius:10px;padding:10px 16px;margin-bottom:6px">
-                        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-                            <span style="color:white;font-weight:700">👤 {row['Responsable']}</span>
-                            <span style="color:{color};font-weight:700">{int(row['Valoraciones'])} val. · {p}%</span>
-                        </div>
-                        <div style="background:#1e2340;border-radius:6px;height:10px">
-                            <div style="height:10px;border-radius:6px;background:{color};width:{p}%"></div>
-                        </div>
-                    </div>""", unsafe_allow_html=True)
