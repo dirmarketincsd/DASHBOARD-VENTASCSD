@@ -6,8 +6,6 @@ import streamlit as st
 from config import EQUIPOS_BASE
 from data_loaders import (
     cargar_tareas,
-    cargar_ventas_cerradas,
-    cargar_agenda_pendiente,
 )
 
 
@@ -120,41 +118,3 @@ def render(ctx):
                             <div style="height:10px;border-radius:6px;background:{color};width:{p}%"></div>
                         </div>
                     </div>""", unsafe_allow_html=True)
-
-        st.markdown("---")
-
-        st.markdown("### ✅ Ventas Cerradas")
-        df_vc_usa, df_vc_esp = cargar_ventas_cerradas()
-        vc1, vc2 = st.columns(2)
-        with vc1:
-            st.markdown("<div style='color:#7c6af7;font-weight:800;font-size:0.9rem;margin-bottom:8px'>🇺🇸 USA</div>", unsafe_allow_html=True)
-            if not df_vc_usa.empty:
-                st.dataframe(df_vc_usa, use_container_width=True, hide_index=True)
-                st.metric("💰 Total USA", f"${df_vc_usa['Total'].sum():,.0f}")
-            else:
-                st.info("Sin ventas cerradas USA.")
-        with vc2:
-            st.markdown("<div style='color:#00d4aa;font-weight:800;font-size:0.9rem;margin-bottom:8px'>🇪🇸 España</div>", unsafe_allow_html=True)
-            if not df_vc_esp.empty:
-                st.dataframe(df_vc_esp, use_container_width=True, hide_index=True)
-                st.metric("💰 Total España", f"${df_vc_esp['Total'].sum():,.0f}")
-            else:
-                st.info("Sin ventas cerradas España.")
-
-        st.markdown("---")
-
-        st.markdown("### 📅 Agenda Pendiente")
-        df_ag_usa, df_ag_esp = cargar_agenda_pendiente()
-        ag1, ag2 = st.columns(2)
-        with ag1:
-            st.markdown("<div style='color:#7c6af7;font-weight:800;font-size:0.9rem;margin-bottom:8px'>🇺🇸 USA</div>", unsafe_allow_html=True)
-            if not df_ag_usa.empty:
-                st.dataframe(df_ag_usa, use_container_width=True, hide_index=True)
-            else:
-                st.info("Sin agenda pendiente USA.")
-        with ag2:
-            st.markdown("<div style='color:#00d4aa;font-weight:800;font-size:0.9rem;margin-bottom:8px'>🇪🇸 España</div>", unsafe_allow_html=True)
-            if not df_ag_esp.empty:
-                st.dataframe(df_ag_esp, use_container_width=True, hide_index=True)
-            else:
-                st.info("Sin agenda pendiente España.")
