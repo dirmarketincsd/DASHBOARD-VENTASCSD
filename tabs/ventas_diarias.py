@@ -114,7 +114,6 @@ def render(ctx):
     fecha_fin       = ctx['fecha_fin']
     semana_sel      = ctx['semana_sel']
     dia_sel         = ctx['dia_sel']
-    grupo_sel       = ctx['grupo_sel']
     responsable_sel = ctx['responsable_sel']
 
     partes = []
@@ -122,7 +121,6 @@ def render(ctx):
     elif modo_fecha=="Rango de fechas" and fecha_ini: partes.append(f"{fecha_ini.strftime('%d/%m')}→{fecha_fin.strftime('%d/%m')}")
     elif modo_fecha=="Semana": partes.append(f"Semana {semana_sel}")
     if dia_sel!="Todos": partes.append(dia_sel)
-    if grupo_sel!="Todos": partes.append(grupo_sel)
     if responsable_sel!="Todos": partes.append(responsable_sel)
     desc = " · ".join(partes) if partes else "Todos los registros"
     st.markdown(f"### 📊 {desc}")
@@ -160,11 +158,9 @@ def render(ctx):
     st.markdown("---")
     st.markdown("### 📅 Valoraciones del Mes")
 
-    if grupo_sel in ('Todos', 'USA'):
-        ag_rows, re_rows, cols_tipos = cargar_tabla_detallada('USA')
-        render_tabla_detallada(ag_rows, re_rows, cols_tipos, '#7c6af7', '🇺🇸 USA')
-        st.markdown("<br>", unsafe_allow_html=True)
+    ag_rows, re_rows, cols_tipos = cargar_tabla_detallada('USA')
+    render_tabla_detallada(ag_rows, re_rows, cols_tipos, '#7c6af7', '🇺🇸 USA')
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    if grupo_sel in ('Todos', 'España'):
-        ag_rows, re_rows, cols_tipos = cargar_tabla_detallada('España')
-        render_tabla_detallada(ag_rows, re_rows, cols_tipos, '#00d4aa', '🇪🇸 España')
+    ag_rows, re_rows, cols_tipos = cargar_tabla_detallada('España')
+    render_tabla_detallada(ag_rows, re_rows, cols_tipos, '#00d4aa', '🇪🇸 España')
