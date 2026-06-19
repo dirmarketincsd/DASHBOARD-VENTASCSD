@@ -1,7 +1,28 @@
+import csv
+import io
+
 import pandas as pd
+import requests
 import streamlit as st
 
 from config import EQUIPOS_BASE, sheet_url, camp_sheet_url
+
+
+def _leer_csv_robusto(url):
+    """
+    Lee un CSV publicado de Google Sheets tolerando filas con distinto
+    número de columnas (común cuando hay tablas auxiliares a la derecha
+    de la tabla principal). pd.read_csv falla con ParserError en estos
+    casos; csv.reader no.
+    """
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+    resp.encoding = 'utf-8'
+    reader = csv.reader(io.StringIO(resp.text))
+    rows = list(reader)
+    max_len = max((len(r) for r in rows), default=0)
+    rows_padded = [r + [''] * (max_len - len(r)) for r in rows]
+    return pd.DataFrame(rows_padded)
 
 
 # ── CARGA VENTAS DIARIAS ───────────────────────────────────────────────────────
@@ -9,7 +30,7 @@ from config import EQUIPOS_BASE, sheet_url, camp_sheet_url
 def cargar_ventas_diarias():
     try:
         url = sheet_url("Ventas diarias")
-        raw = pd.read_csv(url, header=None)
+        raw = _leer_csv_robusto(url)
 
         # Buscar fila header más flexible
         header_idx = None
@@ -29,20 +50,21 @@ def cargar_ventas_diarias():
         if header_idx is None:
             header_idx = 3
 
-        df = pd.read_csv(url, skiprows=header_idx, header=0)
-        df.columns = [str(c).strip().upper().replace('  ',' ') for c in df.columns]
-        df = df.iloc[:, :17]
+        # Tomamos solo las primeras 16 columnas reales de la tabla principal
+        # (todo lo que sigue a la derecha son tablas auxiliares de % y agenda)
+        df = raw.iloc[header_idx + 1:, :16].copy()
         df.columns = ['FECHA','DIA','RESPONSABLE','VALORACIONES',
                       'LEADS WPP USA','LEADS WPP ESPAÑA','LEADS IG ES','LEADS IG USA',
-                      'LEADS FORMULARIO','LEADS GOOGLE','LEADS TIKTOK','LEADS LANDING',
+                      'LEADS GOOGLE','LEADS TIKTOK','LEADS LANDING',
                       'FINANCIAMIENTO','NO FINANCIAMIENTO','OTROS','DEPOSITOS','PRESUPUESTADO']
+        df = df.reset_index(drop=True)
 
         rename = {
             'FECHA':'Fecha', 'DIA':'Dia_Texto',
             'RESPONSABLE':'Responsable', 'VALORACIONES':'Valoraciones',
             'LEADS WPP USA':'Leads WPP USA', 'LEADS WPP ESPAÑA':'Leads WPP España',
             'LEADS IG ES':'Leads IG ES', 'LEADS IG USA':'Leads IG USA',
-            'LEADS FORMULARIO':'Leads Formulario', 'LEADS GOOGLE':'Leads Google',
+            'LEADS GOOGLE':'Leads Google',
             'LEADS TIKTOK':'Leads TikTok', 'LEADS LANDING':'Leads Landing',
             'FINANCIAMIENTO':'Financiamiento', 'NO FINANCIAMIENTO':'No Financiamiento',
             'OTROS':'Otros',
@@ -94,7 +116,7 @@ def cargar_ventas_diarias():
         df['Semana'] = df['Semana'].astype(str).str.strip()
 
         for col in ['Valoraciones','Leads WPP USA','Leads WPP España','Leads IG ES','Leads IG USA',
-                    'Leads Formulario','Leads Google',
+                    'Leads Google',
                     'Leads TikTok','Leads Landing','Financiamiento','No Financiamiento','Otros',
                     'Cierres','Venta Dia Siguiente']:
             if col in df.columns:
@@ -110,6 +132,57 @@ def cargar_ventas_diarias():
     except Exception as e:
         st.error(f"❌ Error ventas diarias: {e}")
         return pd.DataFrame()
+
+
+# ── CARGA LEADS POR SEDE (tabla auxiliar en hoja 'Ventas diarias') ────────────
+@st.cache_data(ttl=60)
+def cargar_leads_por_sede():
+    """
+    Busca, en cualquier parte de la hoja 'Ventas diarias', las filas tipo
+    'LEADS BARCELONA' / 'LEADS HOUSTON' (etiqueta en una celda, valor en la
+    celda justo debajo, misma columna) y las agrupa en España / USA.
+    """
+    SEDES_ESP = ['BARCELONA','MALAGA','MÁLAGA','BILBAO','MADRID','VALENCIA','ALICANTE']
+    SEDES_USA = ['HOUSTON','DALLAS','NEW JERSEY','NEW JERSY','LOS ANGELES','ANGELES','ORLANDO']
+
+    def _norm(sede):
+        s = sede.upper()
+        if s == 'MÁLAGA': return 'Malaga'
+        if s in ('NEW JERSY','NEW JERSEY'): return 'New Jersey'
+        if s == 'ANGELES' or s == 'LOS ANGELES': return 'Los Angeles'
+        return s.capitalize()
+
+    try:
+        url = sheet_url("Ventas diarias")
+        raw = _leer_csv_robusto(url)
+
+        leads_esp = {}
+        leads_usa = {}
+
+        n_rows, n_cols = raw.shape
+        for i in range(n_rows):
+            for j in range(n_cols):
+                val = str(raw.iat[i, j]).strip().upper()
+                if not val.startswith('LEADS '):
+                    continue
+                sede_txt = val.replace('LEADS ', '').strip()
+                if i + 1 >= n_rows:
+                    continue
+                val_num = str(raw.iat[i + 1, j]).strip()
+                try:
+                    num = float(val_num.replace(',', '.'))
+                except (ValueError, AttributeError):
+                    continue
+
+                if sede_txt in SEDES_ESP:
+                    leads_esp[_norm(sede_txt)] = num
+                elif sede_txt in SEDES_USA:
+                    leads_usa[_norm(sede_txt)] = num
+
+        return leads_esp, leads_usa
+    except Exception as e:
+        st.error(f"❌ Error leads por sede: {e}")
+        return {}, {}
 
 
 # ── CARGA ESPAÑA MAYO ──────────────────────────────────────────────────────────

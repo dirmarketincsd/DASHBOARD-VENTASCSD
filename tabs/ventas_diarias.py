@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from config import EQUIPOS_BASE
-from data_loaders import cargar_ventas_mes
+from data_loaders import cargar_ventas_mes, cargar_leads_por_sede
 from config import sheet_url
 
 
@@ -106,6 +106,115 @@ def render_tabla_detallada(ag_rows, re_rows, cols_tipos, color, pais):
     st.dataframe(df_re, use_container_width=True, hide_index=True)
 
 
+def render_tabla_html(df_final, cols_ok_renombradas):
+    """
+    Renderiza df_final como tabla HTML con encabezados de 2 niveles:
+    'Leads WPP' fusionado sobre 'USA' / 'España', 'Leads IG' fusionado
+    sobre 'ES' / 'USA', igual que las celdas combinadas en el Google Sheet.
+    """
+    # Definición de grupos: (etiqueta_superior, [(col_df, etiqueta_sub), ...]) o None para columna simple
+    GRUPOS = [
+        ('Fecha',            [('Fecha', None)]),
+        ('Día',              [('Día', None)]),
+        ('Responsable',      [('Responsable', None)]),
+        ('Leads WPP',        [('Leads WPP USA', 'USA'), ('Leads WPP España', 'España')]),
+        ('Leads IG',         [('Leads IG ES', 'ES'), ('Leads IG USA', 'USA')]),
+        ('Leads Formulario', [('Leads Formulario', None)]),
+        ('Leads Google',     [('Leads Google', None)]),
+        ('Leads Landing',    [('Leads Landing', None)]),
+        ('Leads TikTok',     [('Leads TikTok', None)]),
+        ('Financiamiento',   [('Financiamiento', None)]),
+        ('No Financiamiento',[('No Financiamiento', None)]),
+        ('Otros',            [('Otros', None)]),
+        ('Valoraciones',     [('Valoraciones', None)]),
+        ('Presupuestado',    [('Presupuestado', None)]),
+        ('Depósitos',        [('Depósitos', None)]),
+    ]
+    # Filtrar solo grupos cuyas columnas existen en df_final
+    grupos_ok = []
+    for etiqueta, subcols in GRUPOS:
+        subcols_ok = [(c, s) for c, s in subcols if c in df_final.columns]
+        if subcols_ok:
+            grupos_ok.append((etiqueta, subcols_ok))
+
+    th_style    = "background:#1a1500;color:#c9a84c;border:1px solid #3a3320;padding:8px 10px;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap"
+    th_sub_style= "background:#0d0d0d;color:#8b9bb4;border:1px solid #3a3320;padding:6px 10px;font-size:0.74rem;white-space:nowrap"
+    td_style    = "border:1px solid #2a2a2a;padding:6px 10px;font-size:0.82rem;color:#e8e8e8;white-space:nowrap"
+    td_total    = "border:1px solid #2a2a2a;padding:6px 10px;font-size:0.82rem;color:#c9a84c;font-weight:800;white-space:nowrap;background:#1a1500"
+
+    # Fila 1: etiquetas superiores (colspan = nro de subcolumnas; rowspan=2 si no hay sub-etiquetas)
+    fila1 = "<tr>"
+    for etiqueta, subcols in grupos_ok:
+        if len(subcols) == 1 and subcols[0][1] is None:
+            fila1 += f'<th style="{th_style}" rowspan="2">{etiqueta}</th>'
+        else:
+            fila1 += f'<th style="{th_style}" colspan="{len(subcols)}">{etiqueta}</th>'
+    fila1 += "</tr>"
+
+    # Fila 2: sub-etiquetas (solo para grupos con más de 1 subcolumna)
+    fila2 = "<tr>"
+    for etiqueta, subcols in grupos_ok:
+        if len(subcols) == 1 and subcols[0][1] is None:
+            continue
+        for _, sub in subcols:
+            fila2 += f'<th style="{th_sub_style}">{sub}</th>'
+    fila2 += "</tr>"
+
+    # Filas de datos
+    filas_html = ""
+    for _, row in df_final.iterrows():
+        es_total = str(row.get('Fecha', '')).startswith('📊')
+        estilo = td_total if es_total else td_style
+        filas_html += "<tr>"
+        for _, subcols in grupos_ok:
+            for col, _ in subcols:
+                val = row[col]
+                filas_html += f'<td style="{estilo}">{val}</td>'
+        filas_html += "</tr>"
+
+    tabla_html = f"""
+    <div style="overflow-x:auto;border-radius:10px;border:1px solid #3a3320">
+    <table style="border-collapse:collapse;width:100%">
+        <thead>{fila1}{fila2}</thead>
+        <tbody>{filas_html}</tbody>
+    </table>
+    </div>
+    """
+    st.markdown(tabla_html, unsafe_allow_html=True)
+
+
+def render_leads_sede():
+    """
+    Muestra dos bloques de tarjetas con los Leads por Sede (España / USA)
+    leídos desde la tabla auxiliar de la hoja 'Ventas diarias'.
+    """
+    leads_esp, leads_usa = cargar_leads_por_sede()
+
+    def tarjeta(sede, val, color):
+        return f"""
+        <div style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+                    background:linear-gradient(135deg,#0d0d0d,#1a1500);border:1px solid {color};
+                    border-radius:12px;padding:14px 18px;min-width:120px;
+                    text-align:center;margin:4px">
+            <div style="color:#8b9bb4;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.8px;
+                        margin-bottom:6px;white-space:nowrap">{sede}</div>
+            <div style="color:{color};font-size:1.6rem;font-weight:800;line-height:1">{int(val)}</div>
+        </div>"""
+
+    if leads_esp:
+        st.markdown("**🇪🇸 Leads por Sede — España**")
+        html_esp = "".join(tarjeta(s, v, '#00d4aa') for s, v in leads_esp.items())
+        st.markdown(f'<div style="display:flex;flex-wrap:wrap">{html_esp}</div>', unsafe_allow_html=True)
+
+    if leads_usa:
+        st.markdown("**🇺🇸 Leads por Sede — USA**")
+        html_usa = "".join(tarjeta(s, v, '#7c6af7') for s, v in leads_usa.items())
+        st.markdown(f'<div style="display:flex;flex-wrap:wrap">{html_usa}</div>', unsafe_allow_html=True)
+
+    if not leads_esp and not leads_usa:
+        st.info("Sin datos de Leads por Sede.")
+
+
 def render(ctx):
     df_base         = ctx['df_base']
     df_filtrado     = ctx['df_filtrado']
@@ -129,7 +238,7 @@ def render(ctx):
         st.warning("⚠️ Sin registros para estos filtros.")
     else:
         cols_vis = [
-            'Fecha', 'Dia_Semana', 'Responsable', 'Grupo_Pais',
+            'Fecha', 'Dia_Semana', 'Responsable',
             'Leads WPP USA', 'Leads WPP España', 'Leads IG ES', 'Leads IG USA',
             'Leads Formulario', 'Leads Google',
             'Leads Landing', 'Leads TikTok',
@@ -145,15 +254,17 @@ def render(ctx):
             'Venta Dia Siguiente': 'Presupuestado',
             'Cierres':             'Depósitos',
             'Dia_Semana':          'Día',
-            'Grupo_Pais':          'Grupo',
         })
         totales = {c: df_show[c].sum() if c in df_show.columns else '' for c in df_show.columns}
-        totales['Fecha'] = '📊 TOTAL'; totales['Día'] = ''; totales['Responsable'] = ''; totales['Grupo'] = ''
+        totales['Fecha'] = '📊 TOTAL'; totales['Día'] = ''; totales['Responsable'] = ''
         df_final = pd.concat([df_show, pd.DataFrame([totales])], ignore_index=True)
         st.markdown("#### 📋 Registros por Fecha")
-        st.dataframe(df_final, use_container_width=True, hide_index=True)
+        render_tabla_html(df_final, cols_ok)
         csv = df_filtrado.to_csv(index=False).encode('utf-8')
         st.download_button("⬇️ Descargar CSV", data=csv, file_name=f"ventas_{date.today()}.csv", mime="text/csv")
+
+        st.markdown("---")
+        render_leads_sede()
 
     # ── VALORACIONES DEL MES ───────────────────────────────────────────────────
     st.markdown("---")
