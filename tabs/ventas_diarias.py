@@ -130,7 +130,8 @@ def render(ctx):
     else:
         cols_vis = [
             'Fecha', 'Dia_Semana', 'Responsable', 'Grupo_Pais',
-            'Leads WPP', 'Leads IG', 'Leads Formulario', 'Leads Google',
+            'Leads WPP USA', 'Leads WPP España', 'Leads IG ES', 'Leads IG USA',
+            'Leads Formulario', 'Leads Google',
             'Leads Landing', 'Leads TikTok',
             'Financiamiento', 'No Financiamiento', 'Otros',
             'Valoraciones', 'Venta Dia Siguiente', 'Cierres',

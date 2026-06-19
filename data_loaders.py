@@ -31,15 +31,17 @@ def cargar_ventas_diarias():
 
         df = pd.read_csv(url, skiprows=header_idx, header=0)
         df.columns = [str(c).strip().upper().replace('  ',' ') for c in df.columns]
-        df = df.iloc[:, :15]
-        df.columns = ['FECHA','DIA','RESPONSABLE','VALORACIONES','LEADS WPP','LEADS IG',
+        df = df.iloc[:, :17]
+        df.columns = ['FECHA','DIA','RESPONSABLE','VALORACIONES',
+                      'LEADS WPP USA','LEADS WPP ESPAÑA','LEADS IG ES','LEADS IG USA',
                       'LEADS FORMULARIO','LEADS GOOGLE','LEADS TIKTOK','LEADS LANDING',
                       'FINANCIAMIENTO','NO FINANCIAMIENTO','OTROS','DEPOSITOS','PRESUPUESTADO']
 
         rename = {
             'FECHA':'Fecha', 'DIA':'Dia_Texto',
             'RESPONSABLE':'Responsable', 'VALORACIONES':'Valoraciones',
-            'LEADS WPP':'Leads WPP', 'LEADS IG':'Leads IG',
+            'LEADS WPP USA':'Leads WPP USA', 'LEADS WPP ESPAÑA':'Leads WPP España',
+            'LEADS IG ES':'Leads IG ES', 'LEADS IG USA':'Leads IG USA',
             'LEADS FORMULARIO':'Leads Formulario', 'LEADS GOOGLE':'Leads Google',
             'LEADS TIKTOK':'Leads TikTok', 'LEADS LANDING':'Leads Landing',
             'FINANCIAMIENTO':'Financiamiento', 'NO FINANCIAMIENTO':'No Financiamiento',
@@ -91,7 +93,8 @@ def cargar_ventas_diarias():
         if 'Semana' not in df.columns: df['Semana'] = '1'
         df['Semana'] = df['Semana'].astype(str).str.strip()
 
-        for col in ['Valoraciones','Leads WPP','Leads IG','Leads Formulario','Leads Google',
+        for col in ['Valoraciones','Leads WPP USA','Leads WPP España','Leads IG ES','Leads IG USA',
+                    'Leads Formulario','Leads Google',
                     'Leads TikTok','Leads Landing','Financiamiento','No Financiamiento','Otros',
                     'Cierres','Venta Dia Siguiente']:
             if col in df.columns:
