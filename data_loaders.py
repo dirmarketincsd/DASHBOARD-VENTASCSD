@@ -52,21 +52,7 @@ def cargar_ventas_diarias():
 
         # Tomamos solo las primeras 16 columnas reales de la tabla principal
         # (todo lo que sigue a la derecha son tablas auxiliares de % y agenda)
-        bloque = raw.iloc[header_idx + 1:, :16].reset_index(drop=True)
-
-        # Cortar antes de la tabla auxiliar "Leads por Sede" (o cualquier otra
-        # tabla suelta más abajo): se detiene en la primera fila donde las 3
-        # primeras columnas (Fecha, Dia, Responsable) están todas vacías.
-        fin = len(bloque)
-        for i in range(len(bloque)):
-            a = str(bloque.iat[i, 0]).strip()
-            b = str(bloque.iat[i, 1]).strip()
-            c = str(bloque.iat[i, 2]).strip()
-            vacios = {'', 'nan', 'None'}
-            if a in vacios and b in vacios and c in vacios:
-                fin = i
-                break
-        df = bloque.iloc[:fin].copy()
+        df = raw.iloc[header_idx + 1:, :16].copy()
         df.columns = ['FECHA','DIA','RESPONSABLE','VALORACIONES',
                       'LEADS WPP USA','LEADS WPP ESPAÑA','LEADS IG ES','LEADS IG USA',
                       'LEADS GOOGLE','LEADS TIKTOK','LEADS LANDING',
@@ -152,25 +138,18 @@ def cargar_ventas_diarias():
 @st.cache_data(ttl=60)
 def cargar_leads_por_sede():
     """
-    Busca, en cualquier parte de la hoja 'Ventas diarias', las celdas tipo
-    'LEADS BARCELONA' / 'LEADS HOUSTON' (etiqueta en una celda, valor numérico
-    en la celda justo debajo, misma columna) y las agrupa en España / USA.
-    Tolerante a espacios extra, mayúsculas/minúsculas y tildes.
+    Busca, en cualquier parte de la hoja 'Ventas diarias', las filas tipo
+    'LEADS BARCELONA' / 'LEADS HOUSTON' (etiqueta en una celda, valor en la
+    celda justo debajo, misma columna) y las agrupa en España / USA.
     """
-    import re
-    import unicodedata
-
-    def _sin_tildes(s):
-        nfkd = unicodedata.normalize('NFKD', s)
-        return ''.join(c for c in nfkd if not unicodedata.combining(c))
-
-    SEDES_ESP = ['BARCELONA','MALAGA','BILBAO','MADRID','VALENCIA','ALICANTE']
+    SEDES_ESP = ['BARCELONA','MALAGA','MÁLAGA','BILBAO','MADRID','VALENCIA','ALICANTE']
     SEDES_USA = ['HOUSTON','DALLAS','NEW JERSEY','NEW JERSY','LOS ANGELES','ANGELES','ORLANDO']
 
     def _norm(sede):
-        s = _sin_tildes(sede.upper()).strip()
+        s = sede.upper()
+        if s == 'MÁLAGA': return 'Malaga'
         if s in ('NEW JERSY','NEW JERSEY'): return 'New Jersey'
-        if s in ('ANGELES','LOS ANGELES'): return 'Los Angeles'
+        if s == 'ANGELES' or s == 'LOS ANGELES': return 'Los Angeles'
         return s.capitalize()
 
     try:
@@ -183,13 +162,10 @@ def cargar_leads_por_sede():
         n_rows, n_cols = raw.shape
         for i in range(n_rows):
             for j in range(n_cols):
-                celda = str(raw.iat[i, j])
-                val = _sin_tildes(celda).strip().upper()
-                # Tolerante a "LEADS  HOUSTON", "LEADS HOUSTON ", etc.
-                m = re.match(r'^LEADS\s+(.+?)\s*$', val)
-                if not m:
+                val = str(raw.iat[i, j]).strip().upper()
+                if not val.startswith('LEADS '):
                     continue
-                sede_txt = m.group(1).strip()
+                sede_txt = val.replace('LEADS ', '').strip()
                 if i + 1 >= n_rows:
                     continue
                 val_num = str(raw.iat[i + 1, j]).strip()

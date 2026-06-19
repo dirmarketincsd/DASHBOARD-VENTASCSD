@@ -48,9 +48,15 @@ with st.sidebar:
         semana_sel = st.selectbox("📆 Semana", sems)
 
     dia_sel   = st.selectbox("📅 Día de la semana", ["Todos","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"])
+    grupo_sel = st.selectbox("🌍 Grupo / País", ["Todos","USA","España"])
 
     if not df_base.empty and 'Responsable' in df_base.columns:
-        coms = df_base['Responsable'].unique().tolist()
+        if grupo_sel == "USA":
+            coms = df_base[df_base['Grupo_Pais']=='USA']['Responsable'].unique().tolist()
+        elif grupo_sel == "España":
+            coms = df_base[df_base['Grupo_Pais']=='España']['Responsable'].unique().tolist()
+        else:
+            coms = df_base['Responsable'].unique().tolist()
         vendedores = ["Todos"] + sorted(coms)
     else:
         vendedores = ["Todos"]
@@ -74,6 +80,8 @@ if not df_filtrado.empty and 'Fecha' in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado['Semana'].astype(str)==semana_sel]
     if dia_sel != "Todos" and 'Dia_Semana' in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado['Dia_Semana']==dia_sel]
+    if grupo_sel != "Todos" and 'Grupo_Pais' in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado['Grupo_Pais']==grupo_sel]
     if responsable_sel != "Todos" and 'Responsable' in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado['Responsable']==responsable_sel]
 
@@ -109,6 +117,7 @@ ctx = {
     'fecha_fin':       fecha_fin,
     'semana_sel':      semana_sel,
     'dia_sel':         dia_sel,
+    'grupo_sel':       grupo_sel,
     'responsable_sel': responsable_sel,
     'hoy_ts':          hoy_ts,
     'inicio_sem':      inicio_sem,
