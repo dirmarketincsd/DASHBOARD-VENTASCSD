@@ -24,32 +24,6 @@ def _leer_csv_robusto(url):
     rows_padded = [r + [''] * (max_len - len(r)) for r in rows]
     return pd.DataFrame(rows_padded)
 
-import csv
-import io
-
-import pandas as pd
-import requests
-import streamlit as st
-
-from config import EQUIPOS_BASE, sheet_url, camp_sheet_url
-
-
-def _leer_csv_robusto(url):
-    """
-    Lee un CSV publicado de Google Sheets tolerando filas con distinto
-    número de columnas (común cuando hay tablas auxiliares a la derecha
-    de la tabla principal). pd.read_csv falla con ParserError en estos
-    casos; csv.reader no.
-    """
-    resp = requests.get(url, timeout=30)
-    resp.raise_for_status()
-    resp.encoding = 'utf-8'
-    reader = csv.reader(io.StringIO(resp.text))
-    rows = list(reader)
-    max_len = max((len(r) for r in rows), default=0)
-    rows_padded = [r + [''] * (max_len - len(r)) for r in rows]
-    return pd.DataFrame(rows_padded)
-
 
 # ── CARGA VENTAS DIARIAS ───────────────────────────────────────────────────────
 @st.cache_data(ttl=60)
@@ -84,8 +58,19 @@ def cargar_ventas_diarias():
         if header_idx is None:
             header_idx = 3
 
+        # ── Cortar en la fila TOTAL para ignorar tablas auxiliares debajo ────────
+        data_rows = raw.iloc[header_idx + 1:].copy()
+        total_idx = None
+        for i, row in data_rows.iterrows():
+            val = str(row.iloc[0]).strip().upper()
+            if val in ('TOTAL', 'TOTALES'):
+                total_idx = i
+                break
+        if total_idx is not None:
+            data_rows = data_rows.loc[:total_idx - 1]
+
         # ── Tomar solo las 15 columnas principales (A→O) ──────────────────────
-        df = raw.iloc[header_idx + 1:, :15].copy()
+        df = data_rows.iloc[:, :15].copy()
         df.columns = [
             'FECHA', 'DIA', 'RESPONSABLE', 'VALORACIONES',
             'LEADS WPP ESPAÑA', 'LEADS IG ES', 'LEADS WPP USA', 'LEADS IG USA',
